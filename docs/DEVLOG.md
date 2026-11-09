@@ -1,5 +1,110 @@
 # 开发记录
 
+## 2026-11-09 · 生成并发、播放器、成片历史和 160% 界面
+
+### 完成
+
+- 导入弹窗禁止点遮罩关闭，保留上次导入状态
+- 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地串行
+- 生成弹窗：未生成/全部/取消；生成中「取消生成」
+- 试听单句/连续切换；连续播放从当前句往后
+- 播放条增加总时长事件、点击跳转和 0.5-3.0 倍速下拉
+- AI 拆分/标注集中到右侧 `details` 二级菜单
+- 本章角色快速跳转：上下箭头 + 数字输入 + scrollIntoView
+- 语速改成 0.5-2.0 数字，AI/界面/MCP 全部统一
+- 本地 `duration_factor = 1 / speed`，云 TTS 用自然语言倍数
+- 成片导出历史存 `localStorage`，按项目保留；支持整本单轨和整本分章 ZIP
+- `/v1/zip` 新增到 Node 代理和 Python 本机引擎
+- 导出返回绝对 `file`，Electron `shell.showItemInFolder` 定位
+- 角色音色历史 `voiceHistory`，可单条移除
+- 缩放 1.6，窗口 1600×1000
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `tsc --noUnusedLocals --noUnusedParameters` 无报错
+- Node 引擎实测 `/v1/export` 输出中文文件名 WAV/SRT，`/v1/zip` 打包成功
+- Python `server.py` 语法检查通过
+
+### 坑
+
+- `IndexTTS` 的 `duration_factor` 是时长系数，不是语速；语速 1.2 要传 0.833
+- 云 TTS 没有独立 speed 参数，只能写进 user 指令或 SSML，不能假装有接口参数
+- 并发生成时不能在生成前统一标 dirty，否则取消后未生成的好音频也会被当成待生成
+- 导出历史必须存 localStorage，Master 组件切页会卸载，state 会丢
+- 160% 缩放下 Studio 顶栏会换行，需要 `flex-wrap`
+
+## 2026-11-09 · 角色识别、音色绑定和 Word 导入
+
+### 根因
+
+规则拆分用「引号前最后 2-5 个汉字 + 说/道/问/答」猜说话人，导致：
+
+- `傅聿之下意识看向她，后\n者却先一步：` 被拆成「者却先一步」
+- `声音里带：笑一笑` 被拆成「声音里带」
+- `江宁回过神：你打算…` 被拆成「江宁回过神」
+- `她回：明天早点起` 被拆成「她回」
+- `张兵接茬：` 被拆成「张兵接茬」
+
+这些名字进入 `project.casts` 后，绑定菜单里就会出现一堆奇怪角色。
+
+### 完成
+
+- 规则拆分增加人名形状校验：2-4 个汉字、排除代词/副词/动作开头和结尾、跨行拼接后再匹配
+- 去掉裸「道」作为说话动词，避免「吼道」「笑道」被截成假名字
+- 导入时按全书统计，只保留出现 2 次以上的人名；单次动作片段回到「未知」
+- `refineSpeakers` 用到单章重拆、AI 重拆和整本重拆
+- `isRealCharacter` 同步收紧，允许 2-6 个汉字以保留日式长名
+- AI 分章提示词去掉字数门槛和角色要求，补中/英/日章节标记
+- 角色标注提示词补中/英/日说话标记
+- 本章角色卡片点击不再改当前句，新增「设为当前句」，排序稳定
+- 云/本音色统一「绑定到角色」，再点取消；本地克隆只加入本地库
+- 音色编辑合并成一个弹窗
+- 项目库右键「编辑整本」：整本重拆章节（不动角色）、整本角色标注 + 情绪 + 语速
+- 支持 `.docx` 导入
+- 窗口缩放 1.3
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `tsc --noUnusedLocals --noUnusedParameters --noEmit` 无报错
+- 规则拆分《晚风落法境》前 12 章，假名字从 40 多个降到 0；主要角色保留 江宁、江奕、傅聿之、妈妈
+- DOCX 的 `w:p` / `w:t` 解析用 `@xmldom/xmldom` 验证通过
+
+### 坑
+
+- 只按「引号前 2-5 字」取名字一定会把动作片段当角色；必须先判断人名形状，再做全书频次过滤
+- 裸「道」不能当说话动词，否则「吼道/笑道/接茬道」都会截出假名字
+- 工作台角色卡片点击直接改说话人会造成列表重排和误改；改成显式按钮
+- 云音色绑定和本地克隆是两件事，本地克隆不能顺手绑角色
+- 本地 IndexTTS 的音色参考音频越长，克隆稳定性越好；设计试听文本不能太短
+
+## 2026-11-09 · Git 基线和 MCP 红点
+
+### 完成
+
+- 安装 Git for Windows 2.56.0，确认 `git --version` 正常
+- `git init -b main`，提交基线 `c38a2b2`，创建 `optimize/next`
+- `.gitignore` 排除用户数据、音频、构建产物和迁移包
+- 按 `mp-setup-matt-pocock-skills` 写入 `docs/agents/issue-tracker.md`、`docs/agents/domain.md`，并在 `AGENTS.md` 增加 `## Agent skills`
+- MCP 依赖 `mcp/node_modules` 缺失，执行 `npm.cmd install`，安装 95 个包
+- MCP 新增 `list_projects`，修复无活动项目时的 ENOENT，补引擎超时、音频历史和 `note` 字段
+- 删除 `app/src/data.ts`、`app/src/defaultVoices.ts` 到回收站
+
+### 验证
+
+- `node __test-client.mjs`（MCP stdio 客户端）：7 个工具注册成功
+- `list_projects(includeTrash: true)`：2 个回收站项目
+- 临时复制 `p-mw7phvqs__1794154807729/project.json` 测试 `read_project` / `read_lines`：9 章、首章 33 句
+- `npm.cmd run build` 通过
+
+### 坑
+
+- MCP 红点不是配置语法错误，而是 `mcp/node_modules` 不存在；SDK import 失败时进程立即退出，前端只看到红点
+- OpenCode 修改 MCP 配置后必须重启才会重新拉起进程
+- 仓库当前没有 remote；issue tracker 用本地 `.scratch/`，不依赖 GitHub
+- Git 默认 `core.autocrlf` 会把 LF 转 CRLF；已在仓库内设 `core.autocrlf false`
+
 ## 2026-11-09 · 代码审查和 Bug 修复
 
 ### 完成

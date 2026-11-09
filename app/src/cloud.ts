@@ -18,6 +18,14 @@ export interface CloudTTSPayload {
   instruction?: string;
 }
 
+export interface CloudProvider {
+  id: string;
+  name: string;
+  models: string[];
+  designModel: string;
+  enabled: boolean;
+}
+
 export interface CloudDesignPreview {
   tempId: string;
   name: string;
@@ -36,6 +44,12 @@ export async function listCloudVoices(): Promise<CloudVoice[]> {
   const b = bridge();
   if (!b) return [];
   return b.list();
+}
+
+export async function listCloudProviders(): Promise<CloudProvider[]> {
+  const b = bridge();
+  if (!b) return [];
+  return b.providers();
 }
 
 export async function cloudTTS(payload: CloudTTSPayload): Promise<{ file: string; url: string }> {
@@ -70,6 +84,7 @@ export async function designCloudPreview(payload: {
   description?: string;
   previewText?: string;
   name?: string;
+  provider?: string;
 }): Promise<CloudDesignPreview> {
   const b = bridge();
   if (!b) throw new Error("音色设计只在桌面版可用");

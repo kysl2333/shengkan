@@ -3,6 +3,9 @@ export interface AiConfig {
   model: string;
   apiKey: string;
   autoChapter: boolean;
+  cloudProviders?: {
+    mimo?: boolean;
+  };
   prompts?: {
     chapter?: string;
     annotate?: string;
@@ -30,7 +33,7 @@ export interface AnnotateChange {
   id: number;
   speaker: string;
   emotion: string;
-  speed: string;
+  speed: number;
 }
 
 export interface AnnotateResult {

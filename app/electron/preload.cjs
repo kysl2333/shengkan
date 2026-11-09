@@ -38,8 +38,12 @@ contextBridge.exposeInMainWorld("shengkan", {
     info: () => ipcRenderer.invoke("log:info"),
     open: () => ipcRenderer.invoke("log:open"),
   },
+  shell: {
+    reveal: (file) => ipcRenderer.invoke("shell:reveal", file),
+  },
   cloud: {
     list: () => ipcRenderer.invoke("cloud:list"),
+    providers: () => ipcRenderer.invoke("cloud:providers"),
     tts: (payload) => ipcRenderer.invoke("cloud:tts", payload),
     designPreview: (payload) => ipcRenderer.invoke("cloud:design-preview", payload),
     saveDesign: (payload) => ipcRenderer.invoke("cloud:save-design", payload),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectSummary, TrashSummary } from "../projects";
+import type { ProjectSummary, TrashSummary, ProjectAction } from "../projects";
 import {
   listTrash,
   loadProject,
@@ -23,7 +23,7 @@ import { log } from "../log";
 import { askText } from "../prompt";
 
 const covers = ["cover-a", "cover-b", "cover-c"];
-const ACCEPT = ".txt,.md,.markdown,.epub";
+const ACCEPT = ".txt,.md,.markdown,.epub,.docx";
 
 function hashText(text: string) {
   let h = 0;
@@ -58,7 +58,7 @@ export default function Library({
   onDroppedHandled,
 }: {
   projects: ProjectSummary[];
-  onOpen: (id: string) => void;
+  onOpen: (id: string, action?: ProjectAction) => void;
   onCreate: (
     title: string,
     chapters: ImportedChapter[],
@@ -81,6 +81,7 @@ export default function Library({
   const [dropActive, setDropActive] = useState(false);
   const [aiResult, setAiResult] = useState<{ hash: string; chapters: ImportedChapter[] } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; project: ProjectSummary } | null>(null);
+  const [editTarget, setEditTarget] = useState<ProjectSummary | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashList, setTrashList] = useState<TrashSummary[]>([]);
   const [trashBusy, setTrashBusy] = useState(false);
@@ -193,13 +194,13 @@ export default function Library({
   }
 
   function openImport() {
-    resetImport();
+    if (!text.trim()) resetImport();
     setImportOpen(true);
   }
 
   async function loadFile(file: File) {
     if (!isSupportedFile(file.name)) {
-      setError("只支持 .txt、.md、.epub 文件");
+      setError("只支持 .txt、.md、.epub、.docx 文件");
       return;
     }
     setImportOpen(true);
@@ -383,7 +384,7 @@ export default function Library({
       <div className="lib-head">
         <div>
           <h1 className="lib-title">项目</h1>
-          <p className="lib-sub">把 .txt / .md / .epub 拖进这个页面，就能开始。</p>
+          <p className="lib-sub">把 .txt / .md / .epub / .docx 拖进这个页面，就能开始。</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={openTrash}>回收站</button>
@@ -456,7 +457,7 @@ export default function Library({
           </div>
         ))}
         {!projects.length && (
-          <div className="recent-row"><span>还没有项目</span><span>拖入一个 .epub 或 .txt 开始</span><span className="mono">—</span><span className="mono">0 句</span></div>
+          <div className="recent-row"><span>还没有项目</span><span>拖入一个 .epub、.docx 或 .txt 开始</span><span className="mono">—</span><span className="mono">0 句</span></div>
         )}
       </div>
 
@@ -465,7 +466,7 @@ export default function Library({
           <div className="drop-overlay-inner">
             <div className="drop-icon">⇩</div>
             <b>松手导入</b>
-            <span>支持 .txt / .md / .epub</span>
+            <span>支持 .txt / .md / .epub / .docx</span>
           </div>
         </div>
       )}
@@ -483,7 +484,7 @@ export default function Library({
       />
 
       {importOpen && (
-        <div className="modal-mask" onClick={(e) => { if (e.target === e.currentTarget && !busy) setImportOpen(false); }}>
+        <div className="modal-mask">
           <div className="modal import-modal">
             <div className="modal-head">
               <div>
@@ -510,10 +511,10 @@ export default function Library({
               >
                 <div className="dropzone-icon">{source ? "✓" : "⇩"}</div>
                 <div className="dropzone-text">
-                  {source || "把 .txt / .md / .epub 拖到这里，或点击选择文件"}
+                  {source || "把 .txt / .md / .epub / .docx 拖到这里，或点击选择文件"}
                 </div>
                 <div className="dropzone-sub">
-                  {source ? "点击换一个文件" : "EPUB 会按书里的目录自动分章，TXT 按「第X章」识别"}
+                  {source ? "点击换一个文件" : "EPUB 按书内目录分章，DOCX 按段落提取正文，TXT 按「第X章」识别"}
                 </div>
               </div>
 
@@ -612,7 +613,8 @@ export default function Library({
             </div>
 
             <div className="modal-foot">
-              <button className="btn" onClick={() => setImportOpen(false)} disabled={!!busy}>取消</button>
+              <button className="btn ghost" onClick={resetImport} disabled={!!busy}>清空</button>
+              <button className="btn" onClick={() => setImportOpen(false)} disabled={!!busy}>关闭</button>
               <button className="btn primary" onClick={doImport} disabled={!!busy || !chars}>
                 {busy ? "处理中…" : "导入"}
               </button>
@@ -629,8 +631,50 @@ export default function Library({
           onContextMenu={(e) => e.preventDefault()}
         >
           <button onClick={() => { onOpen(menu.project.id); setMenu(null); }}>打开</button>
-          <button onClick={() => renameProject(menu.project)}>重命名</button>
+          <button onClick={() => { renameProject(menu.project); }}>重命名</button>
+          <button onClick={() => { setEditTarget(menu.project); setMenu(null); }}>编辑整本</button>
           <button className="danger" onClick={() => removeProject(menu.project)}>移到回收站</button>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="modal-mask" onClick={(e) => { if (e.target === e.currentTarget) setEditTarget(null); }}>
+          <div className="modal edit-project-modal">
+            <div className="modal-head">
+              <div>
+                <div className="modal-title">编辑整本 · {editTarget.title}</div>
+                <div className="modal-desc">整本操作会打开项目并开始执行，工作台会显示进度，可以随时停止。</div>
+              </div>
+              <button className="modal-close" onClick={() => setEditTarget(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <button
+                className="edit-option"
+                onClick={() => {
+                  const target = editTarget;
+                  setEditTarget(null);
+                  onOpen(target.id, "rebuild");
+                }}
+              >
+                <b>整本重拆章节</b>
+                <span>只按章节标记重新拆台词，不新增、不删除、不改名任何角色。对不上现有角色的说话人标成「未知」。</span>
+              </button>
+              <button
+                className="edit-option"
+                onClick={() => {
+                  const target = editTarget;
+                  setEditTarget(null);
+                  onOpen(target.id, "annotate");
+                }}
+              >
+                <b>整本角色标注 + 情绪 + 语速</b>
+                <span>逐章用 AI 识别角色，再标注每句的情绪和语速；识别到的新角色会加入项目角色表。</span>
+              </button>
+            </div>
+            <div className="modal-foot">
+              <button className="btn" onClick={() => setEditTarget(null)}>取消</button>
+            </div>
+          </div>
         </div>
       )}
 

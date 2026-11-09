@@ -210,7 +210,7 @@ async function discoverApi(force = false) {
   return apiSpec;
 }
 
-function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
+function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText, durationFactor }) {
   const hasVec = vec.some((v) => v > 0);
   let audioCount = 0;
   let textCount = 0;
@@ -232,7 +232,7 @@ function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
     if (match(label, LABELS.weight)) return Number(emoAlpha ?? 0.65);
     if (match(label, LABELS.emoText)) return emoText || "";
     if (match(label, LABELS.maxTokens)) return 120;
-    if (match(label, LABELS.duration)) return 1.0;
+    if (match(label, LABELS.duration)) return durationFactor;
 
     for (let i = 0; i < LABELS.vec.length; i++) {
       if (match(label, LABELS.vec[i])) return vec[i];
@@ -248,7 +248,7 @@ function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
   });
 }
 
-async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH" }) {
+async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH", speed = 1 }) {
   const local = resolveVoice(voice);
   const remoteVoice = await uploadVoice(local);
 
@@ -256,6 +256,8 @@ async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH
     Array.isArray(emoVector) && emoVector.length === 8
       ? emoVector.map((v) => Number(v) || 0)
       : [0, 0, 0, 0, 0, 0, 0, 0];
+  const rate = Math.min(2, Math.max(0.5, Number(speed) || 1));
+  const durationFactor = 1 / rate;
 
   const spec = await discoverApi();
   const data = buildData(spec, {
@@ -265,6 +267,7 @@ async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH
     vec,
     emoAlpha,
     emoText,
+    durationFactor,
   });
 
   const call = await fetch(`${GRADIO}/gradio_api/call/${GRADIO_API}`, {
@@ -303,50 +306,77 @@ async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH
   return { file: path.join(OUT, name), url: `/v1/audio/${name}` };
 }
 
-const SPEECH_VERB = "说|道|问|答|喊|笑|低声|开口|回答|反问|补充|嘀咕|嘟囔|说道|问道|答道|叫道";
+const SPEECH_VERB =
+  "说道|问道|答道|叫道|喊道|吼道|嚷道|笑道|骂道|哭道|怒道|冷声道|轻声道|沉声道|温声道|开口道|回答道|解释道|补充道|嘟囔道|喃喃道|反问|回答|开口|低声|嘀咕|嘟囔|喃喃|出声|应声|接口|接话|说|问|答|喊|笑|叫";
+
 const BAD_NAMES = new Set([
-  "旁白", "他们", "她们", "我们", "你们", "自己", "此时", "这时", "于是", "然后", "但是", "所以",
-  "作者", "插画", "插图", "制作", "制作信息", "简介", "目录", "译者", "翻译", "出版社", "编辑",
-  "责编", "校对", "监修", "原案", "漫画", "动画", "声优", "封面", "书名", "版权", "登场", "人物",
-  "角色", "主要", "序言", "前言", "后记",
+  "旁白", "未知", "他们", "她们", "它们", "我们", "你们", "咱们", "自己", "大家",
+  "有人", "那人", "这人", "对方", "此时", "这时", "那时", "于是", "然后", "但是",
+  "所以", "因为", "如果", "虽然", "只是", "已经", "还是", "就是", "不是", "可以",
+  "没有", "什么", "怎么", "这样", "那样", "一个", "两个", "三个", "一下", "一边",
+  "作者", "插画", "插图", "制作", "制作信息", "简介", "目录", "译者", "翻译", "出版社",
+  "编辑", "责编", "校对", "监修", "原案", "漫画", "动画", "声优", "封面", "书名",
+  "版权", "登场", "人物", "角色", "主要", "序言", "前言", "后记",
 ]);
+
+const ALLOWED_APPELLATIONS = new Set([
+  "妈妈", "爸爸", "哥哥", "姐姐", "弟弟", "妹妹", "叔叔", "阿姨", "爷爷", "奶奶",
+  "外婆", "外公", "舅舅", "舅妈", "姑姑", "姑父", "姨妈", "姨父", "师父", "师傅",
+  "老师", "医生", "护士", "老板", "司机", "服务员", "店员", "警察", "军官", "士兵",
+  "管家", "女仆", "执事", "同学", "学长", "学姐", "学弟", "学妹",
+]);
+
+// 人名开头不应该是代词、连词、副词或动作片段
+const BAD_START = new Set(
+  "他她它我你您咱这那其此谁每各某有没不别要会能可是在把被让给对从到跟与为以而但却并且或者所因虽如若由忽突又还也都就才只很太更最再已曾正刚快慢轻重低大小多少好坏看听想说问答喊笑走跑站坐躺拿放伸转抬压装帮替叫变完起停回过出进上下拉来去声音话语心眼嘴脸头身口脚日月天年时分秒含随神先见作后面人己哑指一道".split("")
+);
+
+// 人名结尾不应该是语气词、动作、方位或量词
+const BAD_END = new Set(
+  "的了着得地过来去下上里外中前后边旁处时候刻然么呢吧啊呀哦嗯声音话语心眼嘴脸头身口脚笔神住惑愣瞪愿笑道问喊回走站坐看听想起开关停成变完掉好坏快慢轻重高低大小多少一二三四五六七八九十百千万两几个位名条只件张次遍点分秒天年月日时主茬步先带装跟含随他她它我你您咱们没又就苦洞解吼常台".split("")
+);
+
+const CHINESE_NAME = /^[\u4e00-\u9fa5]{2,4}$/;
+
+function isNameShape(name) {
+  if (!name || !CHINESE_NAME.test(name)) return false;
+  if (BAD_NAMES.has(name)) return false;
+  if (ALLOWED_APPELLATIONS.has(name)) return true;
+  if (BAD_START.has(name[0])) return false;
+  if (BAD_END.has(name[name.length - 1])) return false;
+  if (name[0] === name[1] && !ALLOWED_APPELLATIONS.has(name)) return false;
+  return true;
+}
 
 function trimPunct(s) {
   return s.replace(/^[，。；、：\s]+/, "").replace(/\s+$/, "");
 }
 
-const BAD_NAME_CHARS = /[的了着是以为会能要把被让使对向从到不没很太都就才又再还也但因而所说问答喊笑称命措辞改变导将此们]/;
-
-function plausibleName(name) {
-  if (!name) return false;
-  if (BAD_NAMES.has(name)) return false;
-  if (name.length < 2 || name.length > 5) return false;
-  if (BAD_NAME_CHARS.test(name)) return false;
-  return true;
-}
-
 function nameBefore(text) {
-  const tail = text.slice(-24);
-  const speech = new RegExp(`([\\u4e00-\\u9fa5]{2,5})\\s*(?:${SPEECH_VERB})\\s*[:：]?\\s*$`);
+  // 硬换行会把名字拆成两行，先去掉换行再匹配
+  const flat = text.replace(/[\r\n]+/g, "");
+  const tail = flat.slice(-30);
+  const speech = new RegExp(`([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})\\s*[:：]?\\s*$`);
   const m = tail.match(speech);
-  if (m && plausibleName(m[1])) return m[1];
+  if (m && isNameShape(m[1])) return m[1];
 
-  const colon = tail.match(/([\u4e00-\u9fa5]{2,5})\s*[:：]\s*$/);
+  const colon = tail.match(/([\u4e00-\u9fa5]{2,4})\s*[:：]\s*$/);
   if (!colon) return "";
   const name = colon[1];
-  if (!plausibleName(name)) return "";
-  const rest = tail.slice(0, tail.lastIndexOf(name)).trim();
-  if (rest && !/[。！？…”」』\n]$/.test(rest)) return "";
+  if (!isNameShape(name)) return "";
+  const idx = tail.lastIndexOf(name);
+  const prev = idx > 0 ? tail[idx - 1] : "";
+  if (prev && !/[。！？…”」』；：\n]/.test(prev) && !/[，、]/.test(prev)) return "";
   return name;
 }
 
 function nameAfter(text) {
-  const head = text.trimStart();
-  const re = new RegExp(`^([\\u4e00-\\u9fa5]{2,5})\\s*(?:${SPEECH_VERB})`);
+  const head = text.replace(/^[\s]+/, "");
+  const re = new RegExp(`^([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})`);
   const m = head.match(re);
-  if (m && plausibleName(m[1])) return { name: m[1], length: m[0].length };
-  const m2 = head.match(/^([\u4e00-\u9fa5]{2,5})\s*[:：]/);
-  if (m2 && plausibleName(m2[1])) return { name: m2[1], length: m2[0].length };
+  if (m && isNameShape(m[1])) return { name: m[1], length: m[0].length };
+  const m2 = head.match(/^([\u4e00-\u9fa5]{2,4})\s*[:：]/);
+  if (m2 && isNameShape(m2[1])) return { name: m2[1], length: m2[0].length };
   return null;
 }
 
@@ -372,7 +402,15 @@ function splitText(text) {
       let beforeText = before;
       if (beforeName) {
         const idx = before.lastIndexOf(beforeName);
-        if (idx >= 0) beforeText = before.slice(0, idx);
+        if (idx >= 0) {
+          beforeText = before.slice(0, idx);
+        } else {
+          const chars = beforeName.split("").join("\\s*");
+          beforeText = before.replace(
+            new RegExp(`${chars}\\s*(?:${SPEECH_VERB})?\\s*[:：]?\\s*$`),
+            ""
+          );
+        }
       }
       beforeText = trimPunct(beforeText);
       if (beforeText) {
@@ -599,6 +637,7 @@ const server = http.createServer(async (req, res) => {
         emoAlpha: body.emo_alpha,
         emoText: body.emo_text,
         lang: body.lang || "ZH",
+        speed: body.speed,
       });
       return json(res, { ok: true, ...r, mode: "gradio" });
     }
@@ -708,8 +747,32 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         base,
         files,
+        file: path.join(OUT, `${base}.wav`),
         duration: Math.round((master.length / TARGET_SR) * 100) / 100,
         lines: clips.length,
+      });
+    }
+
+    if (url.pathname === "/v1/zip" && req.method === "POST") {
+      const body = await readBody(req);
+      const names = Array.isArray(body.files) ? body.files : [];
+      if (!names.length) return json(res, { error: "files 不能为空" }, 400);
+      const base = safeOutputName(body.output_name, "bundle");
+      const entries = [];
+      for (const name of names) {
+        const file = path.join(OUT, path.basename(String(name || "")));
+        if (fs.existsSync(file)) {
+          entries.push({ name: path.basename(file), data: fs.readFileSync(file) });
+        }
+      }
+      if (!entries.length) return json(res, { error: "没有可打包的音频" }, 400);
+      const zipPath = path.join(OUT, `${base}.zip`);
+      writeZip(zipPath, entries);
+      return json(res, {
+        ok: true,
+        file: zipPath,
+        url: `/v1/audio/${base}.zip`,
+        count: entries.length,
       });
     }
 

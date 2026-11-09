@@ -7,7 +7,7 @@ export interface ImportedBook {
   title: string;
   chapters: ImportedChapter[];
   text: string;
-  format: "epub" | "txt" | "md" | "paste";
+  format: "epub" | "txt" | "md" | "docx" | "paste";
 }
 
 export interface AiChapterMark {
@@ -149,16 +149,60 @@ export function chaptersFromText(text: string, title = "全文"): ImportedChapte
 const NON_CHARACTER =
   /^(作者|插画|插图|制作|制作信息|简介|目录|译者|翻译|出版社|编辑|责编|校对|监修|原案|漫画|动画|声优|CV|封面|书名|扉页|版权|登场|登场人物|人物|人物介绍|主要人物|角色介绍|序言|前言|后记|未知|旁白)$/i;
 
-const BAD_NAME_CHARS = /[的了着是以为会能要把被让使对向从到不没很太都就才又再还也但因而所说问答喊笑称命措辞改变导将此们]/;
+const ALLOWED_APPELLATIONS = new Set([
+  "妈妈", "爸爸", "哥哥", "姐姐", "弟弟", "妹妹", "叔叔", "阿姨", "爷爷", "奶奶",
+  "外婆", "外公", "舅舅", "舅妈", "姑姑", "姑父", "姨妈", "姨父", "师父", "师傅",
+  "老师", "医生", "护士", "老板", "司机", "服务员", "店员", "警察", "军官", "士兵",
+  "管家", "女仆", "执事", "同学", "学长", "学姐", "学弟", "学妹",
+]);
+
+const BAD_START = new Set(
+  "他她它我你您咱这那其此谁每各某有没不别要会能可是在把被让给对从到跟与为以而但却并且或者所因虽如若由忽突又还也都就才只很太更最再已曾正刚快慢轻重低大小多少好坏看听想说问答喊笑走跑站坐躺拿放伸转抬压装帮替叫变完起停回过出进上下拉来去声音话语心眼嘴脸头身口脚日月天年时分秒含随神先见作后面人己哑指一道".split("")
+);
+
+const BAD_END = new Set(
+  "的了着得地过来去下上里外中前后边旁处时候刻然么呢吧啊呀哦嗯声音话语心眼嘴脸头身口脚笔神住惑愣瞪愿笑道问喊回走站坐看听想起开关停成变完掉好坏快慢轻重高低大小多少一二三四五六七八九十百千万两几个位名条只件张次遍点分秒天年月日时主茬步先带装跟含随他她它我你您咱们没又就苦洞解吼常台".split("")
+);
 
 export function isRealCharacter(name: string) {
   const clean = String(name || "").trim();
   if (!clean) return false;
   if (NON_CHARACTER.test(clean)) return false;
   if (/^\d+$/.test(clean)) return false;
-  if (clean.length < 2 || clean.length > 8) return false;
-  if (BAD_NAME_CHARS.test(clean)) return false;
+  if (/^[A-Za-z][A-Za-z .'-]{1,20}$/.test(clean)) return true;
+  if (!/^[\u4e00-\u9fa5]{2,6}$/.test(clean)) return false;
+  if (ALLOWED_APPELLATIONS.has(clean)) return true;
+  if (BAD_START.has(clean[0])) return false;
+  if (BAD_END.has(clean[clean.length - 1])) return false;
+  if (clean[0] === clean[1] && !ALLOWED_APPELLATIONS.has(clean)) return false;
   return true;
+}
+
+export function refineSpeakers<T extends { speaker: string }>(
+  lines: T[],
+  knownNames: Iterable<string> = [],
+  minCount = 2
+) {
+  const keep = new Set<string>(["旁白", "未知"]);
+  for (const name of knownNames) {
+    if (isRealCharacter(name)) keep.add(name);
+  }
+
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    if (line.speaker === "旁白" || line.speaker === "未知") continue;
+    counts.set(line.speaker, (counts.get(line.speaker) || 0) + 1);
+  }
+
+  for (const line of lines) {
+    if (line.speaker === "旁白" || line.speaker === "未知") continue;
+    const name = line.speaker;
+    const trusted = keep.has(name) || isRealCharacter(name);
+    const enough = (counts.get(name) || 0) >= minCount;
+    if (!trusted || (!keep.has(name) && !enough)) {
+      line.speaker = "未知";
+    }
+  }
 }
 
 export function mergeShortChapters(chapters: ImportedChapter[], minChars = 800): ImportedChapter[] {

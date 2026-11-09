@@ -6,11 +6,20 @@ export interface ProjectLine {
   text: string;
   stage?: string;
   emotion: string;
-  speed: string;
+  speed: number;
   status: "done" | "dirty" | "pending";
   audio?: string;
   audioHistory?: string[];
   note?: string;
+}
+
+export interface CastVoiceHistory {
+  name: string;
+  voicePath?: string;
+  cloudModel?: string;
+  cloudVoice?: string;
+  cloudName?: string;
+  usedAt: string;
 }
 
 export interface ProjectCast {
@@ -24,6 +33,7 @@ export interface ProjectCast {
   cloudModel?: string;
   cloudVoice?: string;
   cloudName?: string;
+  voiceHistory?: CastVoiceHistory[];
 }
 
 export interface ProjectChapter {
@@ -59,12 +69,66 @@ export interface TrashSummary extends ProjectSummary {
   deletedAt: string;
 }
 
+export type ProjectAction = "rebuild" | "annotate";
+
 export function castVoiceLabel(cast: ProjectCast) {
   if (cast.cloudName || cast.cloudVoice) {
-    return `云 · ${cast.cloudName || cast.voice || "已绑定"}`;
+    return `云音色 · ${cast.cloudName || cast.voice || "已绑定"}`;
   }
   if (cast.voicePath) return cast.voice || cast.voicePath;
   return "未配音";
+}
+
+export function pushCastVoiceHistory(cast: ProjectCast): CastVoiceHistory[] {
+  const existing = cast.voiceHistory ?? [];
+  const current = cast.cloudVoice || cast.cloudName
+    ? {
+        name: cast.cloudName || cast.voice || "云音色",
+        cloudModel: cast.cloudModel,
+        cloudVoice: cast.cloudVoice,
+        cloudName: cast.cloudName,
+      }
+    : cast.voicePath
+      ? { name: cast.voice || cast.voicePath, voicePath: cast.voicePath }
+      : null;
+  if (!current) return existing;
+  const last = existing[0];
+  if (
+    last &&
+    last.voicePath === current.voicePath &&
+    last.cloudVoice === current.cloudVoice &&
+    last.name === current.name
+  ) {
+    return existing;
+  }
+  return [{ ...current, usedAt: new Date().toISOString() }, ...existing].slice(0, 12);
+}
+
+const SPEED_LABELS: Record<string, number> = {
+  很慢: 0.6,
+  慢: 0.8,
+  稍慢: 0.9,
+  正常: 1,
+  快: 1.2,
+};
+
+export function normalizeSpeed(value: unknown) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.min(2, Math.max(0.5, numeric));
+  return SPEED_LABELS[String(value || "").trim()] ?? 1;
+}
+
+function normalizeProject(project: Project): Project {
+  return {
+    ...project,
+    chapters: (project.chapters ?? []).map((chapter) => ({
+      ...chapter,
+      lines: (chapter.lines ?? []).map((line) => ({
+        ...line,
+        speed: normalizeSpeed(line.speed),
+      })),
+    })),
+  };
 }
 
 interface ProjectsBridge {
@@ -109,14 +173,19 @@ declare global {
         info: () => Promise<{ file: string; size: number }>;
         open: () => Promise<string>;
       };
+      shell: {
+        reveal: (file: string) => Promise<{ ok: boolean }>;
+      };
       cloud: {
         list: () => Promise<import("./cloud").CloudVoice[]>;
+        providers: () => Promise<import("./cloud").CloudProvider[]>;
         tts: (payload: import("./cloud").CloudTTSPayload) => Promise<{ file: string; url: string }>;
         designPreview: (payload: {
           prompt?: string;
           description?: string;
           previewText?: string;
           name?: string;
+          provider?: string;
         }) => Promise<import("./cloud").CloudDesignPreview>;
         saveDesign: (payload: {
           tempId: string;
@@ -138,6 +207,12 @@ declare global {
 
 export function ipcAvailable() {
   return typeof window !== "undefined" && !!window.shengkan?.projects;
+}
+
+export async function revealFile(file: string) {
+  const bridge = window.shengkan?.shell;
+  if (!bridge) throw new Error("打开文件夹只在桌面版可用");
+  return bridge.reveal(file);
 }
 
 function fallbackProject(): Project {
@@ -172,17 +247,17 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 export async function loadProject(id: string): Promise<Project> {
-  if (ipcAvailable()) return window.shengkan!.projects.load(id);
+  if (ipcAvailable()) return normalizeProject(await window.shengkan!.projects.load(id));
   const raw = localStorage.getItem("shengkan:project");
   if (raw) {
     try {
       const parsed = JSON.parse(raw) as Project;
-      if (parsed.id === id) return parsed;
+      if (parsed.id === id) return normalizeProject(parsed);
     } catch {
       /* ignore */
     }
   }
-  return fallbackProject();
+  return normalizeProject(fallbackProject());
 }
 
 export async function saveProject(project: Project): Promise<ProjectSummary> {

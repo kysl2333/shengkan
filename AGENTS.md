@@ -167,16 +167,28 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 云音色和本地音色分开：`/v1/voices` 不扫描 `voices/cloud`。`materialize` 会把云样本复制到 `voices/<名字>-<id>.wav`，删除云不影响本地副本。
 - Electron 不支持 `window.prompt`，会返回 null。所有需要输入的地方用 `app/src/prompt.ts` 的 `askText`，不要用 `window.prompt`。
 - 每句台词最多保留 2 个音频：`audio` 是当前使用，`audioHistory` 最多 1 个。生成第三个时删除最旧的未选中版本；重新绑定音色不会删除已有音频。
-- 整本 AI 分两阶段：`rebuildAllLines` 只拆句不分析角色；`annotateAllChapters` 逐章分析角色，跳过没有「未知」的章节。
+- 整本操作在项目库右键「编辑整本」：`rebuildAllLines` 只拆章节不改角色；`annotateAllChapters` 逐章分析角色、情绪、语速，会新增识别到的角色。
 - 角色页管理 `project.casts` 全量角色；工作台右侧「本章角色」从当前章节台词里的 speaker 推导。工作台「移除本章」只把本章台词改成「未知」，不删项目角色。
 - 角色绑定状态统一用 `castVoiceLabel`：云绑定看 `cloudName / cloudVoice`，本地绑定看 `voicePath`，不要只看 `voicePath`。
-- 音色卡片按钮先弹出角色选择，不默认绑定当前选中角色。
+- 音色按钮只作用于左侧当前选中的角色：云/本地都叫「绑定到角色」，再点变成「取消绑定」；不要弹出角色列表。
+- 「加入本地音色库」只复制样本到 `voices/`，不绑定角色；要使用本地 TTS 时再到本地音色卡点「绑定到角色」。
+- 角色名必须过 `isRealCharacter` / `isNameShape`：2-6 个汉字，排除代词、副词、动作片段和「的她着得地过了」这类结尾，不要只按引号前 2-5 字猜。
+- 规则拆分不能把裸「道」当说话动词；「吼道/笑道/接道」会截出假名字，必须用完整动词。
+- 工作台本章角色卡片点击不能直接改当前句；要改说话人必须点显式的「设为当前句」，避免列表重排和误改。
+- 整本重拆章节只拆章节，不新增、不删除、不改名项目角色；整本角色标注才允许新增角色和改情绪/语速。
+- 支持 `.docx` 导入：`app/src/import/docx.ts` 按 `word/document.xml` 的段落提取正文，再走规则分章。
+- 导入弹窗只能点 ✕ / 关闭退出，不能点遮罩关闭；关闭后保留上次文本、AI 分章结果，避免重新识别。
+- 语速统一存 0.5-2.0 数字：1 正常，小于 1 更慢，大于 1 更快。本地 IndexTTS 传 `duration_factor = 1 / speed`，云 TTS 写进自然语言指令。
+- 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地 1 并发；取消时已发出的请求返回后停止。
+- 成片导出历史存 `localStorage`（`shengkan:exports:<projectId>`），因为 Master 切页会卸载；文件名用「书名-章节名」。
+- `voiceHistory` 记录角色用过的音色，绑定/解绑/删除音色时写入，最多 12 条，可单条移除。
+- 界面缩放 1.6，窗口 1600×1000；顶栏和 master head 必须允许换行。
 - 音色库分组：本地音色按 `category`，云音色按 `model`（小米预置 / 设计音色）。
 - EPUB 解析跳过 `img / figure / figcaption`，避免插图说明混进正文。
-- 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。
+- 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export` / `/v1/zip`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。
 - 工作台 `script` 必须在 `project.chapters` 变化时同步当前章节 `lines`，否则整本 AI 或别的页面修改后界面会显示旧台词。
 - 设置页只保留实际实现的标签页：AI 服务、语音引擎、开发与 MCP。不要加空标签。
-- 本地 IndexTTS 暂不支持单独语速控制；语速按钮只对云 TTS 生效，界面上要标明。
+- 语速滑块和数字输入对云 TTS、本地 IndexTTS 都生效；不要再写「本地不支持语速」。
 - 阿里 CosyVoice 还没接入，需要单独的 DashScope API Key；不要放假按钮。
 
 ## 不要做
@@ -197,7 +209,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - `Master` 的 `/v1/export` 在 Gradio 代理模式曾经没有实现，按钮一直 404；现在由 `engine/wav.mjs` 处理。
 - 本地样本文件名带音色名，改名后不能按名字拼路径，否则会误判为「没有本地克隆」并重复生成样本。
 - `Cast` 删除音色只解绑当前选中角色是旧 bug；必须解绑所有引用该音色的角色。
-- 之前的 41 章项目 `p-mw7nitpe` 已丢失；`p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b` 目前在 `projects/.trash/`，需要在回收站还原。
+- 之前的 41 章项目 `p-mw7nitpe` 已丢失；`p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b` 在 `projects/.trash/`，活动项目是 `p-mw91apwo`（20 章）。
 - `npm.ps1` / `npx.ps1` 被执行策略拦截 → 用 `.cmd`。
 - 中文路径在 PowerShell 输出里可能乱码，但文件操作正常。
 - `npm install` 后 Electron 的 `dist` 可能没下载，需要 `node node_modules/electron/install.js`。

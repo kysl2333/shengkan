@@ -1,4 +1,5 @@
 import { parseEpub } from "./epub";
+import { parseDocx } from "./docx";
 import { chaptersFromText, decodeText, type ImportedBook } from "./text";
 
 export {
@@ -6,11 +7,12 @@ export {
   applyAiChapters,
   estimateSentences,
   isRealCharacter,
+  refineSpeakers,
   mergeShortChapters,
 } from "./text";
 export type { ImportedBook, ImportedChapter } from "./text";
 
-const EXT = /\.(txt|md|markdown|epub)$/i;
+const EXT = /\.(txt|md|markdown|epub|docx)$/i;
 
 export function isSupportedFile(name: string) {
   return EXT.test(name);
@@ -31,6 +33,9 @@ export async function readBookFile(file: File): Promise<ImportedBook> {
   const buffer = await file.arrayBuffer();
   if (/\.epub$/i.test(name)) {
     return parseEpub(buffer, name);
+  }
+  if (/\.docx$/i.test(name)) {
+    return parseDocx(buffer, name);
   }
 
   const text = decodeText(buffer);
