@@ -24,7 +24,7 @@
 
 ## Git
 
-- 仓库根目录就是本目录，主分支 `main`；当前日常优化分支 `optimize/next-3`（`optimize/next-2` 已合并到 `main`），不要直接改 `main`。
+- 仓库根目录就是本目录，主分支 `main`；当前 UI 重构分支 `design/ui-refresh`（`optimize/next-3` 已合并前保留），不要直接改 `main`。
 - 每次提交前更新 `CHANGELOG.md`（用户可见改动）和 `docs/DEVLOG.md`（验证结果、踩坑）。
 - 提交信息用 `type: 简述`，例如 `fix: 生成失败不再删除旧音频`、`docs: 记录 MCP 配置`。
 - 不提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`。

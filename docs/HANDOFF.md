@@ -1,6 +1,6 @@
 # 声栞 · 交接档案
 
-最后更新：2026-11-09
+最后更新：2026-11-10
 
 长期约定看 `AGENTS.md`，本文件看当前状态，改动看 `CHANGELOG.md`。
 
@@ -23,12 +23,12 @@
 | 章节 | 可用。新建、重命名、删除、编辑原文、单章生成 |
 | 成片导出 | 可用。按章节 / 整本单轨 / 整本分章节 ZIP，历史保存在本地 |
 | 整本编辑 | 可用。项目库右键 → 编辑整本：只拆章节 / 角色标注+情绪+语速 |
-| 界面 | 可用。窗口缩放 1.6，1600×1000 |
+| 界面 | 可用。2026-11-10 重构：62px 顶栏、无边框按钮、稿纸层、入场和播放动效 |
 | 生成 | 代码可用，但 2026-11-08 丢失的原始参考音频仍需补齐 |
 | 音色 | `meta.json`、`cloud.json` 和 7 条本地样本 |
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；OpenCode 需重启后重新连接 |
-| Git | 已初始化。`main` 已合并 `optimize/next-2`，当前优化分支 `optimize/next-3` |
+| Git | 已初始化。`main` 已合并 `optimize/next-2`；当前 UI 重构分支 `design/ui-refresh` |
 
 ## 事故说明
 
@@ -49,13 +49,13 @@
 Git 工作流：
 
 ```powershell
-git switch optimize/next   # 日常优化分支
+git switch design/ui-refresh  # 当前 UI 重构分支
 git status
 git add -A
-git commit -m "fix: 说明改了什么"
+git commit -m "feat: 说明改了什么"
 ```
 
-`main` 保留稳定基线，`optimize/next` 用来做后续优化；合并回 `main` 前先跑构建。
+`main` 保留稳定基线；功能分支合并回 `main` 前先跑构建。
 
 开发：
 

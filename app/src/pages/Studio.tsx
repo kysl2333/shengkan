@@ -1612,8 +1612,8 @@ export default function Studio({
                             ⇄
                           </button>
                         ) : null}
-                        <button title="生成这句" onClick={(e) => { e.stopPropagation(); generateSingle(line); }}>⚡</button>
-                        <button title="系统语音试听（临时）" onClick={(e) => { e.stopPropagation(); speakSystem(line.text); }}>🔊</button>
+                        <button title="生成这句" onClick={(e) => { e.stopPropagation(); generateSingle(line); }}>↻</button>
+                        <button title="系统语音试听（临时）" onClick={(e) => { e.stopPropagation(); speakSystem(line.text); }}>♪</button>
                         <button title="在下方插入台词" onClick={(e) => { e.stopPropagation(); insertLine(line.id); }}>＋</button>
                         <button title="删除这句" onClick={(e) => { e.stopPropagation(); deleteLine(line.id); }}>✕</button>
                       </div>
@@ -1678,7 +1678,7 @@ export default function Studio({
             </div>
           </div>
 
-          <div className="player">
+          <div className={`player ${audioPlaying ? "playing" : ""}`}>
             <button className="play-btn" onClick={togglePlay} title="播放 / 暂停">
               {audioPlaying ? "❚❚" : "▶"}
             </button>
@@ -1739,11 +1739,11 @@ export default function Studio({
                   所有 AI 拆分和标注都在这里。整本操作在项目库右键「编辑整本」。
                 </p>
 
-                <details className="tool-menu" open>
+                <details className="tool-menu">
                   <summary>AI 拆分与标注</summary>
 
                   <div className="tool-option">
-                    <button className="btn small primary" onClick={aiRebuildChapter} disabled={annotating}>
+                    <button className="btn small" onClick={aiRebuildChapter} disabled={annotating}>
                       AI 重拆本章（台词 + 角色 + 情绪 + 语速）
                     </button>
                     <p>先规则拆句，再让 AI 识别角色、情绪和语速；会覆盖本章现有台词和音频标记。</p>
@@ -1901,19 +1901,19 @@ export default function Studio({
                       <b>{selected.speaker}</b>
                       <span>{selected.text || "（空白）"}</span>
                     </div>
-                    <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-                      <button className="btn small" style={{ flex: 1 }} onClick={() => speakSystem(selected.text)}>
+                    <div className="current-line-actions">
+                      <button className="btn small ghost" onClick={() => speakSystem(selected.text)}>
                         系统试听
                       </button>
-                      <button className="btn small" style={{ flex: 1 }} onClick={() => changeSpeaker(selected.id, "旁白")}>
+                      <button className="btn small ghost" onClick={() => changeSpeaker(selected.id, "旁白")}>
                         设为旁白
                       </button>
                     </div>
                   </>
                 )}
-              </div>
 
-              <div className="right-block">
+                <div className="block-divider" />
+
                 <div className="right-title">
                   <span className="section-label">生成参数</span>
                   <span className="kbd">IndexTTS 2.5</span>
@@ -1923,7 +1923,7 @@ export default function Studio({
                   <div className="field-label"><span>音色</span><span style={{ color: "var(--text-faint)" }}>
                     {selectedCast?.cloudVoice ? "云端" : selectedCast?.voicePath ? "本地" : "自动匹配"}
                   </span></div>
-                  <div className="input" style={{ opacity: 0.7, lineHeight: "32px" }}>
+                  <div className="value-line">
                     {selectedCast
                       ? selectedCast.cloudVoice || selectedCast.voicePath
                         ? castVoiceLabel(selectedCast)
