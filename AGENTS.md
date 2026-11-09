@@ -24,7 +24,7 @@
 
 ## Git
 
-- 仓库根目录就是本目录，主分支 `main`；日常优化在 `optimize/next` 分支，不要直接改 `main`。
+- 仓库根目录就是本目录，主分支 `main`；当前日常优化分支 `optimize/next-2`（`optimize/next` 已合并到 `main`），不要直接改 `main`。
 - 每次提交前更新 `CHANGELOG.md`（用户可见改动）和 `docs/DEVLOG.md`（验证结果、踩坑）。
 - 提交信息用 `type: 简述`，例如 `fix: 生成失败不再删除旧音频`、`docs: 记录 MCP 配置`。
 - 不提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`。
@@ -189,6 +189,12 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 工作台 `script` 必须在 `project.chapters` 变化时同步当前章节 `lines`，否则整本 AI 或别的页面修改后界面会显示旧台词。
 - 设置页只保留实际实现的标签页：AI 服务、语音引擎、开发与 MCP。不要加空标签。
 - 语速滑块和数字输入对云 TTS、本地 IndexTTS 都生效；不要再写「本地不支持语速」。
+- AI 服务商存在 `ai.json` 的 `provider / baseUrl / model / apiKey`；MiMo TTS 单独用 `mimoTts`，不要复用其他服务商的 Key。
+- 自定义 TTS 是 OpenAI 兼容 `/audio/speech`，配置在 `customTts`，云音色卡片用 `custom:` 前缀的 model 区分。
+- `/v1/audio/` 的 Node 代理必须先 `decodeURIComponent(url.pathname)` 再取 basename，否则中文导出文件会 404。
+- 规则拆句遇到句中短引号（如「假睡」）要合并回旁白；只有独立成段、带说话标记或长引文才当台词。
+- 台词保留 `paragraph` 段号，工作台显示「第 N 段」，不要丢掉原文分段。
+- 成片页「导出句间停顿」只控制拼接静音，不是 TTS 内部断句；不要把两者混在一起解释。
 - 阿里 CosyVoice 还没接入，需要单独的 DashScope API Key；不要放假按钮。
 
 ## 不要做

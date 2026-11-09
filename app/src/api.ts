@@ -33,6 +33,7 @@ export interface Segment {
   text: string;
   emotion: string;
   confidence: number;
+  paragraph?: number;
 }
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {

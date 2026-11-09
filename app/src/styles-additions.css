@@ -359,6 +359,10 @@
 .edit-option b { font-size: 14px; color: var(--text); }
 .edit-option span { font-size: 12px; line-height: 1.6; color: var(--text-dim); }
 .gen-dialog { width: 520px; }
+.ai-done-modal { width: 420px; }
+.ai-usage-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--text-dim); }
+.ai-usage-row:last-child { border-bottom: none; color: var(--text); }
+.ai-usage-row b { font-family: var(--mono); font-size: 13px; color: var(--copper-bright); font-weight: 500; }
 .export-player { display: flex; align-items: center; gap: 10px; margin: 8px 0 10px; }
 .export-player .play-btn { width: 34px; height: 34px; flex: none; }
 .export-player .time { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); white-space: nowrap; }

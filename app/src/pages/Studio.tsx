@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getVoices, splitText, synthesize, audioUrl, deleteAudio } from "../api";
-import { annotateLines, cancelAi, onAiProgress, extractCasts } from "../ai";
+import { annotateLines, cancelAi, onAiProgress, extractCasts, emptyAiUsage, addAiUsage } from "../ai";
 import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
 import { log } from "../log";
-import { askText } from "../prompt";
+import { askText, showAiDone } from "../prompt";
 import { castVoiceLabel, pushCastVoiceHistory, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
 
 type View = "lines" | "source";
@@ -511,6 +511,7 @@ export default function Studio({
       const lines = r.segments.map((s, j) => ({
         id: j + 1,
         speaker: s.speaker,
+        paragraph: s.paragraph,
         text: s.text,
         emotion: s.emotion || "平静",
         speed: 1,
@@ -624,6 +625,11 @@ export default function Studio({
         nextBatch: res.nextBatch,
         casts: casts.length,
       });
+      showAiDone(
+        res.cancelled ? "AI 标注已停止" : "AI 标注完成",
+        res.usage,
+        `修改 ${changed} 句 · ${casts.length} 个角色`
+      );
     } catch (e) {
       addLog(`AI 标注失败：${(e as Error).message}`);
       setTask("idle");
@@ -661,6 +667,7 @@ export default function Studio({
       const baseLines: ProjectLine[] = r.segments.map((s, j) => ({
         id: j + 1,
         speaker: s.speaker,
+        paragraph: s.paragraph,
         text: s.text,
         emotion: s.emotion || "平静",
         speed: 1,
@@ -677,10 +684,12 @@ export default function Studio({
       }
 
       addLog(`规则拆分 ${baseLines.length} 句，开始 AI 分析角色`);
+      let usage = emptyAiUsage();
       try {
         const extracted = await extractCasts(source);
+        usage = addAiUsage(usage, extracted.usage);
         let added = 0;
-        for (const c of extracted) {
+        for (const c of extracted.casts) {
           if (isRealCharacter(c.name) && !baseCasts.some((x) => x.name === c.name)) {
             baseCasts.push({
               ...newCast(c.name),
@@ -696,6 +705,7 @@ export default function Studio({
 
       addLog("开始 AI 标注角色、情绪和语速");
       const { next, casts, changed, res } = await applyAnnotation(baseLines, baseCasts, 0);
+      usage = addAiUsage(usage, res.usage);
       saveLines(next, casts);
       setCurrent(next[0]?.id ?? 1);
       annBatchRef.current = res.cancelled ? res.nextBatch : 0;
@@ -712,6 +722,11 @@ export default function Studio({
         changed,
         cancelled: res.cancelled,
       });
+      showAiDone(
+        res.cancelled ? "AI 重拆本章已停止" : "AI 重拆本章完成",
+        usage,
+        `${next.length} 句 · ${casts.length} 个角色 · 修改 ${changed} 句`
+      );
     } catch (e) {
       addLog(`AI 重拆失败：${(e as Error).message}`);
       setTask("idle");
@@ -769,6 +784,7 @@ export default function Studio({
         const lines: ProjectLine[] = r.segments.map((s, j) => ({
           id: j + 1,
           speaker: s.speaker,
+          paragraph: s.paragraph,
           text: s.text,
           emotion: s.emotion || "平静",
           speed: 1,
@@ -832,6 +848,7 @@ export default function Studio({
         (c) => c.name === "旁白" || isRealCharacter(c.name)
       );
       const known = new Set(casts.map((c) => c.name));
+      let usage = emptyAiUsage();
       const chapters: ProjectChapter[] = [];
       let changedTotal = 0;
       let processed = 0;
@@ -862,7 +879,8 @@ export default function Studio({
 
         try {
           const extracted = await extractCasts(src.source || "");
-          for (const c of extracted) {
+          usage = addAiUsage(usage, extracted.usage);
+          for (const c of extracted.casts) {
             if (isRealCharacter(c.name) && !casts.some((x) => x.name === c.name)) {
               casts.push({
                 ...newCast(c.name),
@@ -877,6 +895,7 @@ export default function Studio({
             casts,
             0
           );
+          usage = addAiUsage(usage, res.usage);
           casts = nextCasts;
           changedTotal += changed;
           processed += 1;
@@ -911,6 +930,11 @@ export default function Studio({
       );
       setTask(stopped ? "idle" : "done");
       log("ai", "整本标注角色完成", { processed, changedTotal, stopped });
+      showAiDone(
+        stopped ? "整本角色标注已停止" : "整本角色标注完成",
+        usage,
+        `完成 ${processed} 章 · 修改 ${changedTotal} 句`
+      );
     } catch (e) {
       addLog(`整本标注失败：${(e as Error).message}`);
       setTask("idle");
@@ -1525,6 +1549,7 @@ export default function Studio({
                           {line.speaker === "未知" ? "待确认角色 · 台词" : "台词"}
                         </span>
                       )}
+                      {line.paragraph ? <span className="tag">第 {line.paragraph} 段</span> : null}
                       <span className="tag emotion">{line.emotion}</span>
                       <span className="tag speed">{Number(line.speed).toFixed(2)}×</span>
                       <span

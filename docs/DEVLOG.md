@@ -1,5 +1,42 @@
 # 开发记录
 
+## 2026-11-09 · 播放 404、AI 服务商和 EPUB 分章
+
+### 根因
+
+- 导出文件用中文名「书名-章节名.wav」后，`/v1/audio/` 拿到的 `url.pathname` 是 percent-encoded，`path.basename` 用编码后的字符串找文件，必然 404；播放键和导出历史都因此失效
+- 规则拆句把 `「假睡」` 这种句中短引号当对话，导致一段旁白被拆成「旁白 + 角色 + 旁白」
+- AI 分章旧提示词允许纯数字 1、2、3 作为章节，且没有利用 EPUB 目录，导致 41 章的误切
+- `duration_factor` 是时长系数，不是语速；时长为 1.2 等于语速变慢
+
+### 完成
+
+- `/v1/audio/` 先 `decodeURIComponent` 再取 basename
+- 播放器和历史播放恢复；播放条总时长、拖动、0.5-3.0 倍速
+- 句中短引号不再拆台词；新增 `paragraph` 段号并显示在台词标签
+- AI 分章提示词禁止纯数字/页码/小节标题；支持传入 EPUB 目录
+- EPUB TOC 解析增强，导入界面显示目录条数，目录存在时不再自动跑 AI
+- AI 服务商可选 MiMo/千问百炼/DeepSeek/自定义；MiMo TTS 配置独立
+- 自定义 OpenAI 兼容 TTS `/audio/speech`
+- AI 操作结束弹 token 统计窗
+- 停顿说明、整本编辑规则/AI 说明、章节生成确认
+- 缩放 1.6
+
+### 验证
+
+- 中文导出 WAV 通过 `/v1/audio/` 返回 200，大小 25,822,124 字节
+- 规则拆分测试：`命名为「假睡」作战` 保持一句旁白，段号 1
+- `/v1/export` + `/v1/zip` 中文文件名通过
+- `npm.cmd run build` 和 `tsc --noUnusedLocals --noUnusedParameters` 通过
+- `server.py` 语法检查通过
+
+### 坑
+
+- FastAPI 的 path 参数会自动解码，Node 的 `URL.pathname` 不会，两个引擎要区别处理
+- 纯数字标题可能是目录页码，也可能是真正的章节；没有目录时必须依赖「第X章」等明确标记
+- 语速和时长系数方向相反，云端说「语速 1.2 倍」，本地要传 `duration_factor=0.833`
+- AI token 的 cached 字段在不同服务商字段名不同，要同时兼容 `prompt_tokens_details.cached_tokens` 和 `cached_tokens`
+
 ## 2026-11-09 · 生成并发、播放器、成片历史和 160% 界面
 
 ### 完成

@@ -5,6 +5,7 @@ export interface ProjectLine {
   speaker: string;
   text: string;
   stage?: string;
+  paragraph?: number;
   emotion: string;
   speed: number;
   status: "done" | "dirty" | "pending";
@@ -156,16 +157,16 @@ declare global {
       ai: {
         get: () => Promise<import("./ai").AiConfig>;
         set: (cfg: import("./ai").AiConfig) => Promise<import("./ai").AiConfig>;
-        test: () => Promise<{ ok: boolean; ms: number; model: string }>;
+        test: () => Promise<{ ok: boolean; ms: number; model: string; provider?: string }>;
         defaults: () => Promise<{ chapter: string; annotate: string }>;
-        detectChapters: (text: string) => Promise<import("./ai").AiChapterMark[]>;
+        detectChapters: (text: string, toc?: string[]) => Promise<import("./ai").AiChapterResult>;
         cancel: () => Promise<boolean>;
         annotate: (
           lines: import("./ai").AnnotateInput[],
           casts: string[],
           startBatch?: number
         ) => Promise<import("./ai").AnnotateResult>;
-        extractCasts: (text: string) => Promise<import("./ai").ExtractedCast[]>;
+        extractCasts: (text: string) => Promise<import("./ai").ExtractedCastResult>;
         onProgress: (cb: (p: import("./ai").AiProgress) => void) => () => void;
       };
       log: {

@@ -386,7 +386,9 @@ function splitText(text) {
   const segments = [];
   const blocks = text.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
 
-  for (const block of blocks) {
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+    const block = blocks[blockIndex];
+    const paragraph = blockIndex + 1;
     let pos = 0;
     let m;
     let quoted = false;
@@ -397,6 +399,18 @@ function splitText(text) {
       const before = block.slice(pos, m.index);
       const quote = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").trim();
       const after = block.slice(m.index + m[0].length);
+      const trimmedBefore = before.trim();
+      const trimmedAfter = after.trim();
+      const speechMarker =
+        new RegExp(`(?:${SPEECH_VERB})\\s*[，,：:]?\\s*$`).test(trimmedBefore) ||
+        new RegExp(`^([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})`).test(trimmedAfter);
+      const embedded =
+        trimmedBefore !== "" &&
+        !speechMarker &&
+        quote.length > 0 &&
+        quote.length <= 20 &&
+        !/[。！？!?…]$/.test(trimmedBefore);
+      if (embedded) continue;
 
       const beforeName = nameBefore(before);
       let beforeText = before;
@@ -414,7 +428,7 @@ function splitText(text) {
       }
       beforeText = trimPunct(beforeText);
       if (beforeText) {
-        segments.push({ speaker: "旁白", text: beforeText, emotion: "平静", confidence: 0.95 });
+        segments.push({ speaker: "旁白", text: beforeText, emotion: "平静", confidence: 0.95, paragraph });
       }
 
       pos = m.index + m[0].length;
@@ -437,12 +451,13 @@ function splitText(text) {
         text: quote,
         emotion: "平静",
         confidence,
+        paragraph,
       });
     }
 
     const rest = trimPunct(block.slice(pos));
     if (rest) {
-      segments.push({ speaker: "旁白", text: rest, emotion: "平静", confidence: 0.95 });
+      segments.push({ speaker: "旁白", text: rest, emotion: "平静", confidence: 0.95, paragraph });
     }
     if (!quoted && !rest) continue;
   }
@@ -560,7 +575,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname.startsWith("/v1/audio/")) {
-      const name = path.basename(url.pathname);
+      let decoded = url.pathname;
+      try {
+        decoded = decodeURIComponent(url.pathname);
+      } catch {
+        /* 保留原路径 */
+      }
+      const name = path.basename(decoded);
       const p = path.join(OUT, name);
       if (!fs.existsSync(p)) return json(res, { error: "not found" }, 404);
       const type = name.endsWith(".srt")

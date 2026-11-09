@@ -147,9 +147,17 @@ async function navEntriesNav(zip: JSZip, navPath: string, entries: NavEntry[]) {
 
   const doc = new DOMParser().parseFromString(await entry.async("string"), "text/html");
   const navs = Array.from(doc.getElementsByTagName("nav"));
-  const toc =
-    navs.find((n) => /toc/i.test(n.getAttribute("epub:type") || n.getAttribute("type") || "")) ||
-    navs[0];
+  const typeOf = (nav: Element) =>
+    `${nav.getAttributeNS("http://www.idpf.org/2007/ops", "type") || nav.getAttribute("epub:type") || nav.getAttribute("type") || ""}`;
+  const withLinks = navs
+    .map((nav) => ({ nav, links: nav.querySelectorAll("a[href]").length }))
+    .filter((item) => item.links > 0)
+    .sort((a, b) => {
+      const at = /toc/i.test(typeOf(a.nav)) ? 1 : 0;
+      const bt = /toc/i.test(typeOf(b.nav)) ? 1 : 0;
+      return bt - at || b.links - a.links;
+    });
+  const toc = withLinks[0]?.nav;
   if (!toc) return;
 
   for (const a of Array.from(toc.querySelectorAll("a[href]"))) {
@@ -175,7 +183,11 @@ async function navEntriesNcx(zip: JSZip, ncxPath: string, entries: NavEntry[]) {
 }
 
 function navTitleFor(entries: NavEntry[], path: string) {
-  return entries.find((e) => e.file === path && !e.fragment)?.title || "";
+  return (
+    entries.find((e) => e.file === path && !e.fragment)?.title ||
+    entries.find((e) => e.file === path)?.title ||
+    ""
+  );
 }
 
 export async function parseEpub(buffer: ArrayBuffer, fileName: string): Promise<ImportedBook> {
@@ -242,11 +254,26 @@ export async function parseEpub(buffer: ArrayBuffer, fileName: string): Promise<
 
     const heading = firstHeading(doc);
     const entries = navByFile.get(path) || [];
+    const findAnchor = (fragment: string) => {
+      const direct = doc.getElementById(fragment);
+      if (direct) return direct;
+      let decoded = fragment;
+      try {
+        decoded = decodeURIComponent(fragment);
+      } catch {
+        /* 保留原值 */
+      }
+      return (
+        Array.from(doc.querySelectorAll("[id],[name]")).find(
+          (el) => el.id === decoded || el.getAttribute("name") === decoded
+        ) || null
+      );
+    };
 
     const anchors = entries
       .map((e) => ({
         title: e.title,
-        el: e.fragment ? (doc.getElementById(e.fragment) as Element | null) : null,
+        el: e.fragment ? findAnchor(e.fragment) : null,
       }))
       .filter((e): e is { title: string; el: Element } => !!e.el);
 
@@ -292,5 +319,6 @@ export async function parseEpub(buffer: ArrayBuffer, fileName: string): Promise<
     chapters,
     text: chapters.map((c) => `${c.title}\n\n${c.body}`).join("\n\n"),
     format: "epub",
+    tocCount: new Set(navEntries.map((e) => `${e.file}#${e.fragment}`)).size,
   };
 }

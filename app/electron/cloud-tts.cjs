@@ -115,16 +115,46 @@ function providerEnabled(id) {
   }
 }
 
+function customTtsConfig() {
+  try {
+    return ai.readAiConfig().customTts || {};
+  } catch {
+    return {};
+  }
+}
+
+function customTtsEnabled() {
+  const cfg = customTtsConfig();
+  return !!(cfg.enabled && cfg.baseUrl && cfg.model && cfg.voice);
+}
+
 function assertProvider(id = "mimo") {
+  if (id === "custom") {
+    if (!customTtsEnabled()) {
+      throw new Error("自定义 TTS 还没配置完整，请到设置 → AI 服务里填写地址、模型和音色");
+    }
+    return;
+  }
   if (!providerEnabled(id)) {
     throw new Error("小米 MiMo 云 TTS 已在设置里关闭，请到设置 → AI 服务里打开");
   }
 }
 
 function providers() {
-  return PROVIDERS.map((provider) => ({
+  const list = [...PROVIDERS];
+  if (customTtsEnabled()) {
+    const cfg = customTtsConfig();
+    list.push({
+      id: "custom",
+      name: cfg.name || "自定义 TTS",
+      models: [`custom:${cfg.model}`],
+      designModel: "",
+      enabled: true,
+    });
+  }
+  return list.map((provider) => ({
     ...provider,
-    enabled: providerEnabled(provider.id),
+    enabled: provider.id === "custom" ? true : providerEnabled(provider.id),
   }));
 }
 
@@ -200,11 +230,24 @@ function findLocalSample(id) {
 }
 
 function list() {
-  if (!providerEnabled("mimo")) return [];
-  const all = [
-    ...PRESETS,
-    ...readCloud().map((item) => ({ ...item, provider: "mimo" })),
-  ];
+  if (!providerEnabled("mimo") && !customTtsEnabled()) return [];
+  const all = [];
+  if (providerEnabled("mimo")) {
+    all.push(...PRESETS, ...readCloud().map((item) => ({ ...item, provider: "mimo" })));
+  }
+  if (customTtsEnabled()) {
+    const cfg = customTtsConfig();
+    all.push({
+      id: "custom-tts",
+      name: cfg.name || "自定义 TTS",
+      desc: `自定义 TTS · ${cfg.model}`,
+      provider: "custom",
+      model: `custom:${cfg.model}`,
+      voice: cfg.voice,
+      gender: "",
+      age: "",
+    });
+  }
 
   return all.map((item) => {
     const local = findLocalSample(item.id);
@@ -261,14 +304,17 @@ function safeVoiceFile(file) {
 
 async function chatAudio({ model, messages, audio }) {
   const cfg = ai.readAiConfig();
-  if (!cfg.apiKey) throw new Error("还没有配置 MiMo API Key，请到设置里填写");
+  const tts = cfg.mimoTts || {};
+  const apiKey = tts.apiKey || (cfg.provider === "mimo" ? cfg.apiKey : "");
+  const baseUrl = String(tts.baseUrl || "https://api.xiaomimimo.com/v1").replace(/\/+$/, "");
+  if (!apiKey) throw new Error("还没有配置小米 MiMo TTS API Key，请到设置 → AI 服务里填写");
 
-  const r = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/chat/completions`, {
+  const r = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "api-key": cfg.apiKey,
-      Authorization: `Bearer ${cfg.apiKey}`,
+      "api-key": apiKey,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({ model, messages, audio, stream: false }),
     signal: AbortSignal.timeout(120000),
@@ -303,12 +349,48 @@ function instructionFor(payload) {
   return "";
 }
 
+async function customSynthesize(payload, text, model) {
+  assertProvider("custom");
+  const cfg = customTtsConfig();
+  const baseUrl = String(cfg.baseUrl || "").replace(/\/+$/, "");
+  const voice = String(payload.voice || cfg.voice || "");
+  if (!voice) throw new Error("自定义 TTS 缺少音色");
+
+  const r = await fetch(`${baseUrl}/audio/speech`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey || ""}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: text,
+      voice,
+      response_format: "wav",
+    }),
+    signal: AbortSignal.timeout(180000),
+  });
+  if (!r.ok) {
+    const detail = (await r.text().catch(() => "")).slice(0, 400);
+    throw new Error(`自定义 TTS 请求失败 HTTP ${r.status}：${detail}`);
+  }
+  const buf = Buffer.from(await r.arrayBuffer());
+  fs.mkdirSync(OUT, { recursive: true });
+  const name = `custom-${crypto.randomUUID()}.wav`;
+  fs.writeFileSync(path.join(OUT, name), buf);
+  return { file: path.join(OUT, name), url: `/v1/audio/${name}` };
+}
+
 async function synthesize(payload) {
-  assertProvider("mimo");
   const text = String(payload.text || "").trim();
   if (!text) throw new Error("text 不能为空");
 
   const model = payload.model || "mimo-v2.5-tts";
+  if (model.startsWith("custom:")) {
+    return customSynthesize(payload, text, model.slice("custom:".length));
+  }
+  assertProvider("mimo");
+
   const voice = payload.voice;
   if (!voice) throw new Error("缺少音色");
 
