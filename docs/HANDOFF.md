@@ -22,7 +22,7 @@
 | 界面 | 可用。窗口缩放 1.3 |
 | 生成 | 代码可用，但 **音色 wav 丢失**，需要恢复 `voices/*.wav` |
 | 音色 | 当前只有 `meta.json`、`cloud.json` 和一条冰糖本地样本 |
-| 项目数据 | `projects/.trash/` 里有 `p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b`，需在回收站还原 |
+| 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；OpenCode 需重启后重新连接 |
 | Git | 已初始化。`main` 基线 `c38a2b2`，日常优化在 `optimize/next` |
 

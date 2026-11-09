@@ -116,6 +116,9 @@ export default function Cast({
   });
   const selected = casts.find((c) => c.id === selectedId) ?? casts[0] ?? null;
   const menuCast = menu ? casts.find((c) => c.id === menu.castId) : null;
+  const invalidCasts = casts.filter(
+    (c) => c.name !== "旁白" && c.name !== "未知" && !isRealCharacter(c.name)
+  );
 
   const keyword = q.trim().toLowerCase();
   const filtered = keyword
@@ -612,6 +615,13 @@ export default function Cast({
                 <button className="btn small" onClick={cleanCasts}>清理无效角色</button>
               </>
             )}
+          </div>
+        )}
+
+        {project && invalidCasts.length > 0 && (
+          <div className="cast-warning">
+            <span>检测到 {invalidCasts.length} 个疑似无效角色（如「她回」「江宁一愣」）</span>
+            <button className="btn small" onClick={cleanCasts}>清理</button>
           </div>
         )}
 

@@ -203,7 +203,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - `Master` 的 `/v1/export` 在 Gradio 代理模式曾经没有实现，按钮一直 404；现在由 `engine/wav.mjs` 处理。
 - 本地样本文件名带音色名，改名后不能按名字拼路径，否则会误判为「没有本地克隆」并重复生成样本。
 - `Cast` 删除音色只解绑当前选中角色是旧 bug；必须解绑所有引用该音色的角色。
-- 之前的 41 章项目 `p-mw7nitpe` 已丢失；`p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b` 目前在 `projects/.trash/`，需要在回收站还原。
+- 之前的 41 章项目 `p-mw7nitpe` 已丢失；`p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b` 在 `projects/.trash/`，活动项目是 `p-mw91apwo`（20 章）。
 - `npm.ps1` / `npx.ps1` 被执行策略拦截 → 用 `.cmd`。
 - 中文路径在 PowerShell 输出里可能乱码，但文件操作正常。
 - `npm install` 后 Electron 的 `dist` 可能没下载，需要 `node node_modules/electron/install.js`。
