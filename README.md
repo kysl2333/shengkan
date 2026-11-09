@@ -37,7 +37,7 @@ npx.cmd electron .
 
 ## 版本管理
 
-仓库主分支是 `main`，日常优化在 `optimize/next`。
+仓库主分支是 `main`，日常优化在 `optimize/next-2`（`optimize/next` 已合并到 `main`）。
 
 ```powershell
 git switch optimize/next
