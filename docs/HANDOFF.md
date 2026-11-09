@@ -28,7 +28,7 @@
 | 音色 | 当前只有 `meta.json`、`cloud.json` 和一条冰糖本地样本 |
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；OpenCode 需重启后重新连接 |
-| Git | 已初始化。`main` 已合并 `optimize/next`，当前优化分支 `optimize/next-2` |
+| Git | 已初始化。`main` 已合并 `optimize/next-2`，当前优化分支 `optimize/next-3` |
 
 ## 事故说明
 
