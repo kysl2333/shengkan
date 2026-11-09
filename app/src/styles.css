@@ -1063,8 +1063,6 @@ textarea.input {
   cursor: pointer;
   position: relative;
   border-radius: 6px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 108px;
   transition: background-color 0.16s var(--ease);
 }
 
@@ -1640,7 +1638,7 @@ textarea.input {
 }
 
 .right-block {
-  padding: 19px 20px 18px;
+  padding: 18px 20px 16px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -2143,7 +2141,7 @@ textarea.input {
 .block-divider {
   height: 1px;
   background: var(--line-soft);
-  margin: 17px 0;
+  margin: 14px 0;
 }
 
 .value-line {

@@ -1719,177 +1719,6 @@ export default function Studio({
         </div>
 
         <aside className="rail-right">
-              <div className="right-block" id="taskBlock">
-                <div className="right-title">
-                  <span className="section-label">本章工具</span>
-                  <span className={`task-state ${task === "running" ? "running" : "done"}`}>
-                    {annotating ? "标注中" : task === "running" ? "进行中" : "就绪"}
-                  </span>
-                </div>
-
-                <div className="task-summary">
-                  <span className="dot ok" />
-                  <span>
-                    {script.length} 句 · {castList.length} 个角色
-                    {unknownCount > 0 ? ` · ${unknownCount} 句待确认` : ""}
-                  </span>
-                </div>
-
-                <p className="tool-help">
-                  所有 AI 拆分和标注都在这里。整本操作在项目库右键「编辑整本」。
-                </p>
-
-                <details className="tool-menu">
-                  <summary>AI 拆分与标注</summary>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={aiRebuildChapter} disabled={annotating}>
-                      AI 重拆本章（台词 + 角色 + 情绪 + 语速）
-                    </button>
-                    <p>先规则拆句，再让 AI 识别角色、情绪和语速；会覆盖本章现有台词和音频标记。</p>
-                  </div>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={annotateWithAi} disabled={annotating}>
-                      AI 标注角色（不重拆台词）
-                    </button>
-                    <p>只改说话人、情绪、语速，不改变句子和已有音频。</p>
-                  </div>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={runSplit} disabled={task === "running" || annotating}>
-                      规则重拆本章（只拆台词）
-                    </button>
-                    <p>只按引号和分段拆句，不调用 AI；认不准的说话人会标成「未知」。</p>
-                  </div>
-
-                  {annotating && (
-                    <button className="btn small" onClick={stopAi} style={{ width: "100%" }}>
-                      停止 AI
-                    </button>
-                  )}
-                </details>
-
-                {aiMsg || aiProgress.total > 0 ? (
-                  <div className="tool-progress">
-                    {aiProgress.total > 0 && (
-                      <div className="task-bar" style={{ flex: 1 }}>
-                        <i style={{ width: `${Math.round((aiProgress.done / aiProgress.total) * 100)}%` }} />
-                      </div>
-                    )}
-                    <span>{aiMsg}</span>
-                  </div>
-                ) : null}
-
-                {logs.length > 0 && (
-                  <div className="task-log" style={{ maxHeight: 140 }}>
-                    {logs.map((l, i) => <div key={i}>{l}</div>)}
-                  </div>
-                )}
-              </div>
-
-              <div className="right-block">
-                <div className="right-title">
-                  <span className="section-label">本章角色</span>
-                  <button className="btn ghost small" onClick={() => setRoleMenu((v) => !v)}>
-                    ＋ 添加角色
-                  </button>
-                </div>
-                <p className="tool-help">
-                  只显示本章出现的角色。移除只把本章台词改成「未知」，不会删除项目角色。
-                </p>
-
-                {roleMenu && (
-                  <div className="role-add-menu">
-                    {castList
-                      .filter((c) => !chapterCastNames.includes(c.name))
-                      .map((c) => (
-                        <button key={c.id} onClick={() => addRoleToChapter(c.name)}>{c.name}</button>
-                      ))}
-                    <button className="new" onClick={createRoleForChapter}>
-                      ＋ 新建角色
-                    </button>
-                  </div>
-                )}
-
-                {chapterCasts.map((c) => {
-                  const roleLines = script.filter((l) => l.speaker === c.name);
-                  const count = roleLines.length;
-                  const rolePos = roleLines.findIndex((l) => l.id === current);
-                  return (
-                    <div
-                      key={c.name}
-                      className={`cast-card ${c.name === selected?.speaker ? "active" : ""}`}
-                    >
-                      <div className="avatar">{c.initial}</div>
-                      <div className="cast-info">
-                        <span className="cast-name">{c.name}</span>
-                        <span className="cast-desc">{castVoiceLabel(c)}</span>
-                      </div>
-                      <div className="cast-jump" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          title="上一句"
-                          onClick={() => jumpRole(c.name, -1)}
-                          disabled={count < 2}
-                        >
-                          ▲
-                        </button>
-                        <input
-                          className="cast-jump-input"
-                          type="number"
-                          min={1}
-                          max={count}
-                          value={rolePos >= 0 ? rolePos + 1 : 1}
-                          onChange={(e) => jumpRoleTo(c.name, Number(e.target.value) - 1)}
-                          title="输入第几句并跳转"
-                        />
-                        <span>/{count}</span>
-                        <button
-                          title="下一句"
-                          onClick={() => jumpRole(c.name, 1)}
-                          disabled={count < 2}
-                        >
-                          ▼
-                        </button>
-                      </div>
-                      <div className="cast-actions">
-                        <button
-                          title="把当前句换成这个角色"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (selected) changeSpeaker(selected.id, c.name);
-                          }}
-                        >
-                          设为当前句
-                        </button>
-                        {c.name !== "未知" && isProjectCast(c.name) && (
-                          <button
-                            title="解绑音色"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              unbindCast(c.name);
-                            }}
-                          >
-                            解绑
-                          </button>
-                        )}
-                        {c.name !== "未知" && c.name !== "旁白" && (
-                          <button
-                            title="从本章移除"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeChapterRole(c.name);
-                            }}
-                          >
-                            移除
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
               <div className="right-block">
                 <div className="right-title">
                   <span className="section-label">当前台词</span>
@@ -1991,11 +1820,113 @@ export default function Studio({
               </div>
 
               <div className="right-block">
+                <div className="right-title">
+                  <span className="section-label">本章角色</span>
+                  <button className="btn ghost small" onClick={() => setRoleMenu((v) => !v)}>
+                    ＋ 添加角色
+                  </button>
+                </div>
+                <p className="tool-help">
+                  移除只改本章，不删项目角色。
+                </p>
+
+                {roleMenu && (
+                  <div className="role-add-menu">
+                    {castList
+                      .filter((c) => !chapterCastNames.includes(c.name))
+                      .map((c) => (
+                        <button key={c.id} onClick={() => addRoleToChapter(c.name)}>{c.name}</button>
+                      ))}
+                    <button className="new" onClick={createRoleForChapter}>
+                      ＋ 新建角色
+                    </button>
+                  </div>
+                )}
+
+                {chapterCasts.map((c) => {
+                  const roleLines = script.filter((l) => l.speaker === c.name);
+                  const count = roleLines.length;
+                  const rolePos = roleLines.findIndex((l) => l.id === current);
+                  return (
+                    <div
+                      key={c.name}
+                      className={`cast-card ${c.name === selected?.speaker ? "active" : ""}`}
+                    >
+                      <div className="avatar">{c.initial}</div>
+                      <div className="cast-info">
+                        <span className="cast-name">{c.name}</span>
+                        <span className="cast-desc">{castVoiceLabel(c)}</span>
+                      </div>
+                      <div className="cast-jump" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          title="上一句"
+                          onClick={() => jumpRole(c.name, -1)}
+                          disabled={count < 2}
+                        >
+                          ▲
+                        </button>
+                        <input
+                          className="cast-jump-input"
+                          type="number"
+                          min={1}
+                          max={count}
+                          value={rolePos >= 0 ? rolePos + 1 : 1}
+                          onChange={(e) => jumpRoleTo(c.name, Number(e.target.value) - 1)}
+                          title="输入第几句并跳转"
+                        />
+                        <span>/{count}</span>
+                        <button
+                          title="下一句"
+                          onClick={() => jumpRole(c.name, 1)}
+                          disabled={count < 2}
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <div className="cast-actions">
+                        <button
+                          title="把当前句换成这个角色"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (selected) changeSpeaker(selected.id, c.name);
+                          }}
+                        >
+                          设为当前句
+                        </button>
+                        {c.name !== "未知" && isProjectCast(c.name) && (
+                          <button
+                            title="解绑音色"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unbindCast(c.name);
+                            }}
+                          >
+                            解绑
+                          </button>
+                        )}
+                        {c.name !== "未知" && c.name !== "旁白" && (
+                          <button
+                            title="从本章移除"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeChapterRole(c.name);
+                            }}
+                          >
+                            移除
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="right-block">
                 <div className="right-title"><span className="section-label">本次生成</span></div>
                 <div className="engine-note">
                   <b>{selectedCast?.cloudVoice ? "小米云 TTS" : "IndexTTS 2.5"}</b>
                   {selectedCast?.cloudVoice ? " · 云端生成，保留本地音频" : " · 本地或远端 Gradio"}<br />
-                  队列串行 · 只跑待生成或改动过的句子
+                  并发按音色自动调整 · 只跑待生成或改动过的句子
                   {genMsg && (
                     <div style={{ marginTop: 6, color: genState === "error" ? "#c4553f" : "var(--teal)" }}>
                       {genMsg}
@@ -2003,6 +1934,75 @@ export default function Studio({
                   )}
                 </div>
               </div>
+              <div className="right-block" id="taskBlock">
+                <div className="right-title">
+                  <span className="section-label">本章工具</span>
+                  <span className={`task-state ${task === "running" ? "running" : "done"}`}>
+                    {annotating ? "标注中" : task === "running" ? "进行中" : "就绪"}
+                  </span>
+                </div>
+
+                <div className="task-summary">
+                  <span className="dot ok" />
+                  <span>
+                    {script.length} 句 · {castList.length} 个角色
+                    {unknownCount > 0 ? ` · ${unknownCount} 句待确认` : ""}
+                  </span>
+                </div>
+
+                <p className="tool-help">
+                  整本操作在项目库右键「编辑整本」。
+                </p>
+
+                <details className="tool-menu">
+                  <summary>AI 拆分与标注</summary>
+
+                  <div className="tool-option">
+                    <button className="btn small" onClick={aiRebuildChapter} disabled={annotating}>
+                      AI 重拆本章（台词 + 角色 + 情绪 + 语速）
+                    </button>
+                    <p>先规则拆句，再让 AI 识别角色、情绪和语速；会覆盖本章现有台词和音频标记。</p>
+                  </div>
+
+                  <div className="tool-option">
+                    <button className="btn small" onClick={annotateWithAi} disabled={annotating}>
+                      AI 标注角色（不重拆台词）
+                    </button>
+                    <p>只改说话人、情绪、语速，不改变句子和已有音频。</p>
+                  </div>
+
+                  <div className="tool-option">
+                    <button className="btn small" onClick={runSplit} disabled={task === "running" || annotating}>
+                      规则重拆本章（只拆台词）
+                    </button>
+                    <p>只按引号和分段拆句，不调用 AI；认不准的说话人会标成「未知」。</p>
+                  </div>
+
+                  {annotating && (
+                    <button className="btn small" onClick={stopAi} style={{ width: "100%" }}>
+                      停止 AI
+                    </button>
+                  )}
+                </details>
+
+                {aiMsg || aiProgress.total > 0 ? (
+                  <div className="tool-progress">
+                    {aiProgress.total > 0 && (
+                      <div className="task-bar" style={{ flex: 1 }}>
+                        <i style={{ width: `${Math.round((aiProgress.done / aiProgress.total) * 100)}%` }} />
+                      </div>
+                    )}
+                    <span>{aiMsg}</span>
+                  </div>
+                ) : null}
+
+                {logs.length > 0 && (
+                  <div className="task-log" style={{ maxHeight: 140 }}>
+                    {logs.map((l, i) => <div key={i}>{l}</div>)}
+                  </div>
+                )}
+              </div>
+
         </aside>
       </div>
 

@@ -44,7 +44,7 @@
 顶栏 62px
 左 244px 章节树（窄窗 222 / 200）
 中 弹性 稿纸，最大 840px
-右 392px 工具、角色、当前句参数（窄窗 344 / 306）
+右 392px 当前句参数、本章角色、生成状态、AI 工具（窄窗 344 / 306）
 底 72px 播放条
 ```
 
@@ -66,7 +66,7 @@
 
 - 不使用全屏 `backdrop-filter`，弹窗遮罩只用半透明底色。
 - 过渡只写 `transform / opacity / background-color`，不写 `transition: all`。
-- 台词和原文段落开启 `content-visibility: auto`，离屏内容不参与布局和绘制。
+- 原文段落开启 `content-visibility: auto`，离屏内容不参与布局和绘制；台词列表不用它，保证角色跳转落点稳定。
 - 旧的 `styles-additions.css` 已并入 `styles.css`，不再加载第二份覆盖样式。
 
 
