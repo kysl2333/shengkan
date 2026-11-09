@@ -20,7 +20,7 @@ import {
 } from "../import";
 import { detectChapters, cancelAi, getAiConfig, onAiProgress } from "../ai";
 import { log } from "../log";
-import { askText } from "../prompt";
+import { askText, showAiDone } from "../prompt";
 
 const covers = ["cover-a", "cover-b", "cover-c"];
 const ACCEPT = ".txt,.md,.markdown,.epub,.docx";
@@ -215,27 +215,52 @@ export default function Library({
       setBaseChapters(book.chapters);
       setName(book.title);
       setMode("auto");
-      setSource(`${file.name} · ${formatSize(file.size)} · ${book.format.toUpperCase()}`);
+      setSource(
+        `${file.name} · ${formatSize(file.size)} · ${book.format.toUpperCase()}${
+          book.tocCount ? ` · 目录 ${book.tocCount} 条` : ""
+        }`
+      );
       setAiResult(null);
       log("import", "文件解析完成", {
         format: book.format,
         chapters: book.chapters.length,
+        toc: book.tocCount ?? 0,
         chars: book.text.length,
         title: book.title,
       });
 
+      if (book.format === "epub" && (book.tocCount ?? 0) > 1 && book.chapters.length <= 1) {
+        setError(
+          `EPUB 目录有 ${book.tocCount} 条，但正文锚点定位失败。请用「AI 识别」或「整本一章」，或换一个 EPUB 版本。`
+        );
+      }
+
       const cfg = await getAiConfig();
-      if (cfg.autoChapter && book.chapters.length <= 1 && book.text.length > 2000) {
+      if (
+        cfg.autoChapter &&
+        book.chapters.length <= 1 &&
+        (book.tocCount ?? 0) <= 1 &&
+        book.text.length > 2000
+      ) {
         setBusy("规则没认出章节，AI 正在识别");
         const off = onAiProgress((p) => setBusy(p.message));
         try {
-          const marks = await detectChapters(book.text);
+          const result = await detectChapters(
+            book.text,
+            book.chapters.map((c) => c.title).filter(Boolean)
+          );
+          const marks = result.marks;
           const next = applyAiChapters(book.text, marks);
           if (next.length > 1) {
             setChapters(next);
             setMode("ai");
             setAiResult({ hash: hashText(book.text), chapters: next });
             log("import", "自动 AI 分章完成", { chapters: next.length });
+            showAiDone(
+              "AI 分章完成",
+              result.usage,
+              `识别到 ${next.length} 章，可以核对后导入。`
+            );
           }
         } catch (e) {
           log("import", "自动 AI 分章失败", { error: (e as Error).message });
@@ -303,13 +328,22 @@ export default function Library({
     log("import", "开始 AI 分章", { chars: text.length, force });
     const off = onAiProgress((p) => setBusy(p.message));
     try {
-      const marks = await detectChapters(text);
+      const result = await detectChapters(
+        text,
+        baseChapters.map((c) => c.title).filter(Boolean)
+      );
+      const marks = result.marks;
       const next = applyAiChapters(text, marks);
       if (!next.length) throw new Error("AI 没有识别出章节");
       setChapters(next);
       setMode("ai");
       setAiResult({ hash, chapters: next });
       log("import", "AI 分章完成", { marks: marks.length, chapters: next.length });
+      showAiDone(
+        "AI 分章完成",
+        result.usage,
+        `识别到 ${next.length} 章，可以核对后导入。`
+      );
     } catch (e) {
       log("import", "AI 分章失败", { error: (e as Error).message });
       setError((e as Error).message);
@@ -656,8 +690,8 @@ export default function Library({
                   onOpen(target.id, "rebuild");
                 }}
               >
-                <b>整本重拆章节</b>
-                <span>只按章节标记重新拆台词，不新增、不删除、不改名任何角色。对不上现有角色的说话人标成「未知」。</span>
+                <b>整本重拆章节（规则，不调用 AI）</b>
+                <span>只按章节标题和引号规则重新拆台词，不新增、不删除、不改名任何角色，不消耗 token。对不上现有角色的说话人标成「未知」。</span>
               </button>
               <button
                 className="edit-option"
@@ -667,8 +701,8 @@ export default function Library({
                   onOpen(target.id, "annotate");
                 }}
               >
-                <b>整本角色标注 + 情绪 + 语速</b>
-                <span>逐章用 AI 识别角色，再标注每句的情绪和语速；识别到的新角色会加入项目角色表。</span>
+                <b>整本角色标注 + 情绪 + 语速（AI）</b>
+                <span>逐章用 AI 识别角色，再标注每句的情绪和语速；识别到的新角色会加入项目角色表，会消耗 token。</span>
               </button>
             </div>
             <div className="modal-foot">

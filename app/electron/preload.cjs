@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld("shengkan", {
     set: (cfg) => ipcRenderer.invoke("ai:config:set", cfg),
     test: () => ipcRenderer.invoke("ai:test"),
     defaults: () => ipcRenderer.invoke("ai:default-prompts"),
-    detectChapters: (text) => ipcRenderer.invoke("ai:detect-chapters", text),
+    detectChapters: (text, toc) => ipcRenderer.invoke("ai:detect-chapters", text, toc),
     cancel: () => ipcRenderer.invoke("ai:cancel-detect"),
     annotate: (lines, casts, startBatch) => ipcRenderer.invoke("ai:annotate-lines", lines, casts, startBatch),
     extractCasts: (text) => ipcRenderer.invoke("ai:extract-casts", text),

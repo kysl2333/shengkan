@@ -8,6 +8,7 @@ export interface ImportedBook {
   chapters: ImportedChapter[];
   text: string;
   format: "epub" | "txt" | "md" | "docx" | "paste";
+  tocCount?: number;
 }
 
 export interface AiChapterMark {
@@ -102,7 +103,7 @@ function findTitleStart(text: string, title: string, bodyIndex: number) {
 }
 
 const SKIP_AI_CHAPTER =
-  /^(制作信息|简介|目录|版权|封面|扉页|插图|插画|作者|登场人物|人物介绍|主要人物|角色介绍|译者|出版社|前言|序言|后记)/;
+  /^(制作信息|简介|目录|版权|封面|扉页|插图|插画|作者|登场人物|人物介绍|主要人物|角色介绍|译者|出版社|前言|序言|后记|\d+|P\d+)/i;
 
 export function applyAiChapters(text: string, marks: AiChapterMark[]): ImportedChapter[] {
   const source = text.replace(/\r\n?/g, "\n");

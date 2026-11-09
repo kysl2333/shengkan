@@ -104,6 +104,7 @@ export default function App() {
         lines = r.segments.map((s, j) => ({
           id: j + 1,
           speaker: s.speaker,
+          paragraph: s.paragraph,
           text: s.text,
           emotion: s.emotion || "平静",
           speed: 1,

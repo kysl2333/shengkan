@@ -483,9 +483,12 @@ export default function Master({ project }: { project: Project | null }) {
         <aside className="master-side">
           <div className="panel-box">
             <div className="panel-title">
-              <span>停顿</span>
+              <span>导出句间停顿</span>
               <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-faint)" }}>毫秒</span>
             </div>
+            <p className="tool-help" style={{ marginBottom: 10 }}>
+              这里只控制导出时句子之间插入的静音长度。TTS 负责单句内部的断句和语气停顿，不会用这里的数值。
+            </p>
             {(
               [
                 ["逗号", "comma"],

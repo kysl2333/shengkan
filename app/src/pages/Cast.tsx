@@ -35,6 +35,7 @@ function VoiceWave() {
 }
 
 function cloudGroup(voice: CloudVoice) {
+  if (voice.provider === "custom") return "自定义 TTS";
   return voice.model.includes("voiceclone") ? "设计音色" : "小米预置";
 }
 
@@ -138,7 +139,7 @@ export default function Cast({
         : true
     )
     .sort((a, b) => cloudGroup(a).localeCompare(cloudGroup(b), "zh-CN"));
-  const enabledProviders = cloudProviders.filter((p) => p.enabled);
+  const designProviders = cloudProviders.filter((p) => p.enabled && p.designModel);
 
   function unbind(castId: string) {
     if (!project) return;
@@ -284,8 +285,8 @@ export default function Cast({
   }
 
   async function editCloud(voice: CloudVoice) {
-    if (voice.model === "mimo-v2.5-tts") {
-      window.alert("预置音色不能改名，先保存成设计音色");
+    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom") {
+      window.alert("预置音色和自定义 TTS 请在设置 → AI 服务里修改");
       return;
     }
     const value = await askVoiceEdit(voice.name, voice.desc || "");
@@ -336,11 +337,11 @@ export default function Cast({
   }
 
   function openDesign() {
-    if (!enabledProviders.length) {
-      setError("没有启用的云 TTS，请到设置 → AI 服务里打开小米 MiMo");
+    if (!designProviders.length) {
+      setError("没有支持设计音色的云 TTS，请到设置 → AI 服务里打开小米 MiMo");
       return;
     }
-    setDesignProvider(enabledProviders[0].id);
+    setDesignProvider(designProviders[0].id);
     setDesignPrompt("");
     setDesignDesc("");
     setDesignText(
@@ -424,8 +425,8 @@ export default function Cast({
   }
 
   async function removeCloud(voice: CloudVoice) {
-    if (voice.model === "mimo-v2.5-tts") {
-      window.alert("预置音色是内置的，不能删除。需要本地参考音频请点「加入本地音色库」。");
+    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom") {
+      window.alert("预置音色和自定义 TTS 不能从这里删除；自定义 TTS 请到设置里关闭。");
       return;
     }
     if (!window.confirm(`删除云音色「${voice.name}」？\n\n音频会移到 voices/.trash，不会永久删除；已经克隆到本地的副本不受影响。`)) return;
@@ -735,7 +736,7 @@ export default function Cast({
             {selected ? `正在给「${selected.name}」绑定音色，点按钮可取消绑定` : "先在左侧选一个角色"}
           </span>
           {mode === "cloud" && (
-            <button className="btn small" onClick={openDesign} disabled={!enabledProviders.length}>
+            <button className="btn small" onClick={openDesign} disabled={!designProviders.length}>
               设计音色卡
             </button>
           )}
@@ -814,8 +815,8 @@ export default function Cast({
                         <div className="voice-tags">
                           {v.gender && <span>{v.gender}</span>}
                           {v.age && <span>{v.age}</span>}
-                          <span>小米</span>
-                          <span>{v.model.includes("voiceclone") ? "设计" : "预置"}</span>
+                          <span>{v.provider === "custom" ? "自定义" : "小米"}</span>
+                          <span>{v.provider === "custom" ? "TTS" : v.model.includes("voiceclone") ? "设计" : "预置"}</span>
                           {v.localPath && <span>本地库</span>}
                         </div>
                         <VoiceWave />
@@ -841,7 +842,7 @@ export default function Cast({
                           >
                             {v.localPath ? "已在本地库" : "加入本地音色库"}
                           </button>
-                          {v.model !== "mimo-v2.5-tts" && (
+                          {v.model !== "mimo-v2.5-tts" && v.provider !== "custom" && (
                             <>
                               <button className="voice-edit" onClick={() => editCloud(v)}>编辑</button>
                               <button className="voice-del" onClick={() => removeCloud(v)}>删除</button>
@@ -887,13 +888,13 @@ export default function Cast({
                   className="select"
                   value={designProvider}
                   onChange={(e) => setDesignProvider(e.target.value)}
-                  disabled={designBusy || enabledProviders.length <= 1}
+                  disabled={designBusy || designProviders.length <= 1}
                 >
-                  {enabledProviders.map((p) => (
+                  {designProviders.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-                {!enabledProviders.length && (
+                {!designProviders.length && (
                   <div className="tool-help">没有启用的云 TTS，请到设置 → AI 服务里打开。</div>
                 )}
               </div>

@@ -3,6 +3,7 @@ const path = require("node:path");
 const { app } = require("electron");
 
 const DEFAULTS = {
+  provider: "mimo",
   baseUrl: "https://api.xiaomimimo.com/v1",
   model: "mimo-v2.6-flash",
   apiKey: "",
@@ -10,9 +11,48 @@ const DEFAULTS = {
   cloudProviders: {
     mimo: true,
   },
+  customTts: {
+    enabled: false,
+    name: "自定义 TTS",
+    baseUrl: "",
+    apiKey: "",
+    model: "tts-1",
+    voice: "alloy",
+  },
+  mimoTts: {
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    apiKey: "",
+  },
   prompts: {
     chapter: "",
     annotate: "",
+  },
+};
+
+const PROVIDERS = {
+  mimo: {
+    name: "小米 MiMo",
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    model: "mimo-v2.6-flash",
+    tts: true,
+  },
+  qwen: {
+    name: "千问百炼",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    tts: false,
+  },
+  deepseek: {
+    name: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    tts: false,
+  },
+  custom: {
+    name: "自定义",
+    baseUrl: "",
+    model: "",
+    tts: false,
   },
 };
 
@@ -25,6 +65,26 @@ function normalizeSpeed(value) {
   const numeric = Number(value);
   if (Number.isFinite(numeric)) return Math.min(2, Math.max(0.5, numeric));
   return SPEED_LABELS[String(value || "").trim()] ?? 1;
+}
+
+function emptyUsage() {
+  return { input: 0, output: 0, total: 0, cached: 0 };
+}
+
+function addUsage(total, usage) {
+  if (!usage) return total;
+  const input = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0;
+  const output = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0;
+  const sum = Number(usage.total_tokens ?? 0) || input + output;
+  const cached = Number(
+    usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens ?? 0
+  ) || 0;
+  return {
+    input: total.input + input,
+    output: total.output + output,
+    total: total.total + sum,
+    cached: total.cached + cached,
+  };
 }
 
 let detectAbort = null;
@@ -46,6 +106,8 @@ function readAiConfig() {
     ...saved,
     prompts: { ...DEFAULTS.prompts, ...(saved.prompts || {}) },
     cloudProviders: { ...DEFAULTS.cloudProviders, ...(saved.cloudProviders || {}) },
+    customTts: { ...DEFAULTS.customTts, ...(saved.customTts || {}) },
+    mimoTts: { ...DEFAULTS.mimoTts, ...(saved.mimoTts || {}) },
     apiKey: saved.apiKey || process.env.MIMO_API_KEY || "",
   };
 }
@@ -56,6 +118,14 @@ function writeAiConfig(cfg) {
   next.cloudProviders = {
     ...DEFAULTS.cloudProviders,
     ...(cfg.cloudProviders || next.cloudProviders || {}),
+  };
+  next.customTts = {
+    ...DEFAULTS.customTts,
+    ...(cfg.customTts || next.customTts || {}),
+  };
+  next.mimoTts = {
+    ...DEFAULTS.mimoTts,
+    ...(cfg.mimoTts || next.mimoTts || {}),
   };
   const file = configFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -70,30 +140,37 @@ function normalizeBase(url) {
 async function chatJSON(messages, options = {}) {
   const cfg = readAiConfig();
   if (!cfg.apiKey) {
-    throw new Error("还没有配置 MiMo API Key，请到设置 → AI 服务里填写");
+    throw new Error("还没有配置 API Key，请到设置 → AI 服务里填写");
   }
 
+  const isMimo = cfg.provider === "mimo" || /xiaomimimo/i.test(String(cfg.baseUrl || ""));
   const body = {
     model: cfg.model,
     messages,
     temperature: options.temperature ?? 0.1,
-    max_completion_tokens: options.maxTokens ?? 16384,
     stream: false,
     response_format: { type: "json_object" },
-    // 分章/标注是结构化任务，关掉思考更快、更省 token，也避免 content 被思考吃光
-    thinking: { type: options.thinking ? "enabled" : "disabled" },
   };
+  if (isMimo) {
+    body.max_completion_tokens = options.maxTokens ?? 16384;
+    // MiMo 的结构化任务关掉思考，避免 reasoning 吃光输出
+    body.thinking = { type: options.thinking ? "enabled" : "disabled" };
+  } else {
+    body.max_tokens = options.maxTokens ?? 16384;
+  }
 
   const timeout = AbortSignal.timeout(options.timeout ?? TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
 
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${cfg.apiKey}`,
+  };
+  if (isMimo) headers["api-key"] = cfg.apiKey;
+
   const r = await fetch(`${normalizeBase(cfg.baseUrl)}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": cfg.apiKey,
-      Authorization: `Bearer ${cfg.apiKey}`,
-    },
+    headers,
     body: JSON.stringify(body),
     signal,
   });
@@ -155,24 +232,37 @@ const SYSTEM_PROMPT = `你是小说章节识别器。只识别章节结构，不
 2. 支持中文标记：第X章/回/节/卷/部/篇/集、序章、楔子、引子、前言、后记、尾声、终章、番外。
 3. 支持英文标记：Chapter N、Part N、Prologue、Epilogue。
 4. 支持日文标记：第X話、第X章、第X節、第X巻、序章、終章、番外編。
-5. 不要因为正文短就合并章节。少于 1500 字甚至少于 500 字的短章，只要是独立章节标记就保留。
-6. 不要把卷内小节、场景标题、人物介绍、目录条目单独算一章。
-7. 跳过版权页、目录、简介、作者的话、登场人物、插图页、制作信息。
-8. 每章返回该章正文开头的原样片段作为 start，20-60 个汉字，必须与原文逐字一致，不要改写、不要加省略号、不要包含标题行。
-9. 标题按原文照抄；原文没有标题、但内容明显分段时，可以起一个简短标题。
-10. 不要遗漏主要章节，也不要编造原文不存在的章节。
-11. 如果整段文本确实没有章节划分，返回一个章节，title 用「全文」。
-12. 不要返回角色、情绪、语速、台词拆分；这些是后续独立步骤。
+5. 纯数字 1、2、3、页码 P011、插图编号、目录条目、场景小标题都不是章节，不要单独切分；只有原文明确写成「第1章」并带正文结构时才保留。
+6. 不要按目录页的页码或条目数量切分；目录只用来核对标题，正文里的章节标题才是边界。
+7. 不要因为正文短就合并章节。少于 1500 字甚至少于 500 字的短章，只要是独立章节标记就保留。
+8. 不要把卷内小节、场景标题、人物介绍、目录条目单独算一章。
+9. 跳过版权页、目录、简介、作者的话、登场人物、插图页、制作信息。
+10. 每章返回该章正文开头的原样片段作为 start，20-60 个汉字，必须与原文逐字一致，不要改写、不要加省略号、不要包含标题行。
+11. 标题按原文照抄；原文没有标题、但内容明显分段时，可以起一个简短标题。
+12. 不要遗漏主要章节，也不要编造原文不存在的章节。
+13. 如果整段文本确实没有章节划分，返回一个章节，title 用「全文」。
+14. 不要返回角色、情绪、语速、台词拆分；这些是后续独立步骤。
 
 只返回 JSON，不附带任何解释：
 {"chapters":[{"title":"第一章 雨夜","start":"雨声压低了整条巷子，"}]}`;
 
-async function detectChapters(text, onProgress) {
+async function detectChapters(text, onProgress, toc = []) {
   const source = String(text || "").trim();
   if (!source) throw new Error("文本为空");
 
+  const tocTitles = (Array.isArray(toc) ? toc : [])
+    .map((title) => String(title || "").trim())
+    .filter(Boolean)
+    .slice(0, 120);
+  const tocHint = tocTitles.length
+    ? `出版社目录（优先按这些标题在正文里定位，不要新增目录外章节）：\n${tocTitles
+        .map((title, i) => `${i + 1}. ${title}`)
+        .join("\n")}\n\n`
+    : "";
+
   const chunks = splitChunks(source);
   const marks = [];
+  let usage = emptyUsage();
   const cfg = readAiConfig();
   const systemPrompt = String(cfg.prompts?.chapter || "").trim() || SYSTEM_PROMPT;
   detectAbort = new AbortController();
@@ -185,16 +275,17 @@ async function detectChapters(text, onProgress) {
         message: chunks.length > 1 ? `AI 正在识别第 ${i + 1}/${chunks.length} 段` : "AI 正在识别章节",
       });
 
-      const { data } = await chatJSON(
+      const { data, usage: chunkUsage } = await chatJSON(
         [
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `请识别下面这段原文的章节结构：\n\n${chunks[i].text}`,
+            content: `${tocHint}请识别下面这段原文的章节结构：\n\n${chunks[i].text}`,
           },
         ],
         { signal: detectAbort.signal }
       );
+      usage = addUsage(usage, chunkUsage);
 
       const list = Array.isArray(data.chapters) ? data.chapters : [];
       for (const item of list) {
@@ -228,7 +319,7 @@ async function detectChapters(text, onProgress) {
   marks.sort((a, b) => a.index - b.index);
   const deduped = marks.filter((m, i) => i === 0 || m.index !== marks[i - 1].index);
   if (!deduped.length) throw new Error("AI 没有识别出章节，可以改用规则识别或整本一章");
-  return deduped;
+  return { marks: deduped, usage };
 }
 
 const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给你一章已经拆好的台词，每句有 id、speaker、text。
@@ -253,7 +344,7 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 
 async function annotateLines(lines, casts, onProgress, startBatch = 0) {
   const list = Array.isArray(lines) ? lines : [];
-  if (!list.length) return { changes: [], cancelled: false, nextBatch: 0 };
+  if (!list.length) return { changes: [], cancelled: false, nextBatch: 0, usage: emptyUsage() };
 
   const names = (casts || []).map((c) => (typeof c === "string" ? c : c?.name)).filter(Boolean);
   const BATCH = 60;
@@ -261,6 +352,7 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
   for (let i = 0; i < list.length; i += BATCH) batches.push(list.slice(i, i + BATCH));
 
   const changes = [];
+  let usage = emptyUsage();
   let cancelled = false;
   let finished = Math.max(0, Math.min(startBatch, batches.length));
   detectAbort = new AbortController();
@@ -281,13 +373,14 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
         lines: batches[i].map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       };
 
-      const { data } = await chatJSON(
+      const { data, usage: chunkUsage } = await chatJSON(
         [
           { role: "system", content: systemPrompt },
           { role: "user", content: JSON.stringify(payload) },
         ],
         { signal: detectAbort.signal }
       );
+      usage = addUsage(usage, chunkUsage);
 
       for (const item of Array.isArray(data.lines) ? data.lines : []) {
         const id = Number(item?.id);
@@ -317,7 +410,7 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
     message: cancelled ? "已停止，保留已完成结果" : "角色标注完成",
   });
 
-  return { changes, cancelled, nextBatch: finished };
+  return { changes, cancelled, nextBatch: finished, usage };
 }
 
 const CAST_PROMPT = `你是小说角色分析器。读下面这段原文，列出真正有台词的人物。
@@ -344,6 +437,7 @@ async function extractCasts(text, onProgress) {
 
   const chunks = splitChunks(source);
   const map = new Map();
+  let usage = emptyUsage();
   detectAbort = new AbortController();
 
   try {
@@ -354,13 +448,14 @@ async function extractCasts(text, onProgress) {
         message: chunks.length > 1 ? `AI 正在分析角色 ${i + 1}/${chunks.length}` : "AI 正在分析角色",
       });
 
-      const { data } = await chatJSON(
+      const { data, usage: chunkUsage } = await chatJSON(
         [
           { role: "system", content: CAST_PROMPT },
           { role: "user", content: chunks[i].text },
         ],
         { signal: detectAbort.signal, maxTokens: 4096 }
       );
+      usage = addUsage(usage, chunkUsage);
 
       for (const item of Array.isArray(data.casts) ? data.casts : []) {
         const name = String(item?.name || "").trim();
@@ -383,7 +478,7 @@ async function extractCasts(text, onProgress) {
   }
 
   onProgress?.({ done: chunks.length, total: chunks.length, message: "角色分析完成" });
-  return [...map.values()];
+  return { casts: [...map.values()], usage };
 }
 
 const VOICE_DESIGN_PROMPT = `你是有声书音色设计师。根据用户给的角色或声音提示，设计一个适合的音色。
@@ -455,7 +550,7 @@ async function testConnection() {
     ],
     { maxTokens: 128, timeout: 30000 }
   );
-  return { ok: data?.ok === true, ms: Date.now() - started, model: readAiConfig().model };
+  return { ok: data?.ok === true, ms: Date.now() - started, model: readAiConfig().model, provider: readAiConfig().provider };
 }
 
 function defaultPrompts() {

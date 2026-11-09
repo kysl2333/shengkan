@@ -24,10 +24,14 @@ ipcMain.handle("ai:config:set", (_event, cfg) => ai.writeAiConfig(cfg));
 ipcMain.handle("ai:test", () => ai.testConnection());
 ipcMain.handle("ai:default-prompts", () => ai.defaultPrompts());
 ipcMain.handle("ai:cancel-detect", () => ai.cancelDetect());
-ipcMain.handle("ai:detect-chapters", (event, text) =>
-  ai.detectChapters(text, (progress) => {
-    if (!event.sender.isDestroyed()) event.sender.send("ai:progress", progress);
-  })
+ipcMain.handle("ai:detect-chapters", (event, text, toc) =>
+  ai.detectChapters(
+    text,
+    (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send("ai:progress", progress);
+    },
+    toc
+  )
 );
 ipcMain.handle("ai:annotate-lines", (event, lines, casts, startBatch) =>
   ai.annotateLines(

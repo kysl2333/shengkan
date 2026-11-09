@@ -1,3 +1,5 @@
+import type { AiUsage } from "./ai";
+
 export function askText(
   title: string,
   defaultValue = "",
@@ -85,6 +87,67 @@ export interface VoiceEditValue {
   desc: string;
 }
 
+export function showAiDone(title: string, usage: AiUsage, summary: string) {
+  const mask = document.createElement("div");
+  mask.className = "modal-mask";
+  mask.style.zIndex = "210";
+
+  const modal = document.createElement("div");
+  modal.className = "modal ai-done-modal";
+
+  const head = document.createElement("div");
+  head.className = "modal-head";
+  const headText = document.createElement("div");
+  const titleEl = document.createElement("div");
+  titleEl.className = "modal-title";
+  titleEl.textContent = title;
+  const desc = document.createElement("div");
+  desc.className = "modal-desc";
+  desc.textContent = summary;
+  headText.append(titleEl, desc);
+  head.appendChild(headText);
+
+  const body = document.createElement("div");
+  body.className = "modal-body";
+  const rows: [string, number][] = [
+    ["输入 token", usage.input],
+    ["输出 token", usage.output],
+    ["缓存 token", usage.cached],
+    ["总计 token", usage.total],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    row.className = "ai-usage-row";
+    const left = document.createElement("span");
+    left.textContent = label;
+    const right = document.createElement("b");
+    right.textContent = Number(value || 0).toLocaleString();
+    row.append(left, right);
+    body.appendChild(row);
+  }
+
+  const foot = document.createElement("div");
+  foot.className = "modal-foot";
+  const ok = document.createElement("button");
+  ok.className = "btn primary";
+  ok.textContent = "知道了";
+  foot.appendChild(ok);
+
+  modal.append(head, body, foot);
+  mask.appendChild(modal);
+  document.body.appendChild(mask);
+  ok.focus();
+  ok.onclick = () => mask.remove();
+  mask.onclick = (event) => {
+    if (event.target === mask) mask.remove();
+  };
+  modal.onkeydown = (event) => {
+    if (event.key === "Escape" || event.key === "Enter") {
+      event.preventDefault();
+      mask.remove();
+    }
+  };
+}
 export function askVoiceEdit(
   name: string,
   desc: string

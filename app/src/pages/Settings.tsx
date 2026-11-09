@@ -6,6 +6,37 @@ import { log, logInfo, openLog } from "../log";
 
 const nav = ["AI 服务", "语音引擎", "开发与 MCP"];
 
+const AI_PROVIDERS = [
+  {
+    id: "mimo",
+    name: "小米 MiMo",
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    model: "mimo-v2.6-flash",
+    note: "内置 TTS",
+  },
+  {
+    id: "qwen",
+    name: "千问百炼",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    note: "文本分析 · TTS 需单独配置",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    note: "文本分析 · 无 TTS",
+  },
+  {
+    id: "custom",
+    name: "自定义",
+    baseUrl: "",
+    model: "",
+    note: "自己填写地址和模型",
+  },
+] as const;
+
 function Row({ label, help, children }: { label: string; help: string; children: React.ReactNode }) {
   return (
     <div className="setting-row">
@@ -108,7 +139,32 @@ export default function Settings() {
             <>
 
           <div className="setting-group">
-            <Row label="服务地址" help="兼容 OpenAI 的 Base URL，末尾带 /v1。默认用小米 MiMo。">
+            <Row
+              label="AI 服务商"
+              help="分章和角色标注使用这里的服务。选择预设会自动填地址和模型，仍可手动修改。千问/DeepSeek 目前只用于文本分析，TTS 请在下面单独配置。"
+            >
+              <div className="mode-cards">
+                {AI_PROVIDERS.map((provider) => (
+                  <div
+                    key={provider.id}
+                    className={`mode-card ${aiCfg?.provider === provider.id ? "on" : ""}`}
+                    onClick={() =>
+                      aiCfg &&
+                      setAiCfg({
+                        ...aiCfg,
+                        provider: provider.id,
+                        baseUrl: provider.baseUrl || aiCfg.baseUrl,
+                        model: provider.model || aiCfg.model,
+                      })
+                    }
+                  >
+                    <b>{provider.name}</b>
+                    <span>{provider.note}</span>
+                  </div>
+                ))}
+              </div>
+            </Row>
+            <Row label="服务地址" help="兼容 OpenAI 的 Base URL，末尾带 /v1。">
               <div className="input-row">
                 <input
                   className="input"
@@ -126,7 +182,7 @@ export default function Settings() {
                 </div>
               )}
             </Row>
-            <Row label="API Key" help="MiMo 控制台创建的 sk- 开头密钥，只存在本机。">
+            <Row label="API Key" help="只存在本机，不会写进项目或安装包。">
               <input
                 className="input"
                 type="password"
@@ -135,15 +191,12 @@ export default function Settings() {
                 onChange={(e) => aiCfg && setAiCfg({ ...aiCfg, apiKey: e.target.value })}
               />
             </Row>
-            <Row label="模型" help="章节识别和台词标注都用这个模型。">
-              <select
-                className="select"
-                value={aiCfg?.model ?? "mimo-v2.6-flash"}
+            <Row label="模型" help="例如 mimo-v2.6-flash、qwen-plus、deepseek-chat，或自定义模型名。">
+              <input
+                className="input"
+                value={aiCfg?.model ?? ""}
                 onChange={(e) => aiCfg && setAiCfg({ ...aiCfg, model: e.target.value })}
-              >
-                <option value="mimo-v2.6-flash">mimo-v2.6-flash</option>
-                <option value="mimo-v2.6-pro">mimo-v2.6-pro</option>
-              </select>
+              />
             </Row>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
               <button className="btn primary" onClick={saveAiCfg} disabled={!aiCfg}>保存 AI 配置</button>
@@ -175,7 +228,130 @@ export default function Settings() {
                 </span>
                 小米 MiMo
               </div>
-              <div className="tool-help">当前只接入了 MiMo；以后新增的云 TTS 会在这里逐个开关。</div>
+              <div className="tool-help">
+                小米 MiMo 内置 TTS。千问/DeepSeek 目前只用于分章和角色标注，TTS 请用下面的自定义服务。
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+                <Row label="MiMo TTS Key" help="AI 服务商不是小米时，这里单独填 MiMo TTS 的 Key；留空则沿用上面的 AI Key。">
+                  <input
+                    className="input"
+                    type="password"
+                    value={aiCfg?.mimoTts?.apiKey ?? ""}
+                    onChange={(e) =>
+                      aiCfg &&
+                      setAiCfg({
+                        ...aiCfg,
+                        mimoTts: { ...aiCfg.mimoTts, apiKey: e.target.value },
+                      })
+                    }
+                  />
+                </Row>
+                <Row label="MiMo TTS 地址" help="默认 https://api.xiaomimimo.com/v1。">
+                  <input
+                    className="input"
+                    value={aiCfg?.mimoTts?.baseUrl ?? ""}
+                    onChange={(e) =>
+                      aiCfg &&
+                      setAiCfg({
+                        ...aiCfg,
+                        mimoTts: { ...aiCfg.mimoTts, baseUrl: e.target.value },
+                      })
+                    }
+                  />
+                </Row>
+              </div>
+
+              <div
+                className="check-row"
+                style={{ cursor: "pointer", marginTop: 8 }}
+                onClick={() =>
+                  aiCfg &&
+                  setAiCfg({
+                    ...aiCfg,
+                    customTts: {
+                      ...aiCfg.customTts,
+                      enabled: !aiCfg.customTts?.enabled,
+                    },
+                  })
+                }
+              >
+                <span className={`check ${aiCfg?.customTts?.enabled ? "on" : ""}`}>
+                  {aiCfg?.customTts?.enabled ? "✓" : " "}
+                </span>
+                启用自定义 TTS
+              </div>
+              {aiCfg?.customTts?.enabled && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+                  <Row label="TTS 名称" help="显示在云音色卡片上的名字。">
+                    <input
+                      className="input"
+                      value={aiCfg.customTts?.name ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          customTts: { ...aiCfg.customTts, name: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="TTS 地址" help="兼容 OpenAI 的 Base URL，例如 https://api.openai.com/v1。">
+                    <input
+                      className="input"
+                      placeholder="https://.../v1"
+                      value={aiCfg.customTts?.baseUrl ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          customTts: { ...aiCfg.customTts, baseUrl: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="TTS API Key" help="只存在本机。">
+                    <input
+                      className="input"
+                      type="password"
+                      value={aiCfg.customTts?.apiKey ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          customTts: { ...aiCfg.customTts, apiKey: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="TTS 模型" help="例如 tts-1、gpt-4o-mini-tts，或服务商提供的模型名。">
+                    <input
+                      className="input"
+                      value={aiCfg.customTts?.model ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          customTts: { ...aiCfg.customTts, model: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="TTS 音色 ID" help="服务商的 voice 参数，例如 alloy、nova 或自定义 ID。">
+                    <input
+                      className="input"
+                      value={aiCfg.customTts?.voice ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          customTts: { ...aiCfg.customTts, voice: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                </div>
+              )}
             </Row>
           </div>
 
