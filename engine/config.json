@@ -1,0 +1,9 @@
+{
+  "mode": "gradio",
+  "gradioUrl": "http://192.168.3.68:7860",
+  "gradioApi": "gen_single",
+  "voiceLib": "",
+  "python": "",
+  "indexttsCodeDir": "",
+  "indexttsModelDir": ""
+}

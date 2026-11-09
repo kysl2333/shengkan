@@ -1,0 +1,24 @@
+# 依赖和构建产物
+node_modules/
+dist/
+release/
+app/tsconfig.tsbuildinfo
+*.log
+*.tmp
+
+# 引擎运行产物
+engine/outputs/
+engine/__pycache__/
+engine/.preview/
+
+# 用户数据（不进版本库）
+projects/
+voices/
+mcp/data/
+
+# 旧迁移包
+声栞迁移包/
+
+# 系统文件
+.DS_Store
+Thumbs.db
