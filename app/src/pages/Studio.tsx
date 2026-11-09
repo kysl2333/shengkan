@@ -542,11 +542,12 @@ export default function Studio({
     }
   }
 
-  async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], startBatch = 0) {
+  async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], startBatch = 0, context = "") {
     const res = await annotateLines(
       baseLines.map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       baseCasts.map((c) => c.name),
-      startBatch
+      startBatch,
+      context
     );
 
     let changed = 0;
@@ -608,7 +609,8 @@ export default function Studio({
       const { next, casts, changed, res } = await applyAnnotation(
         script,
         project?.casts ?? [],
-        startBatch
+        startBatch,
+        `${project?.title || ""} · ${chapter?.title || ""}`
       );
       saveLines(next, casts);
       annBatchRef.current = res.cancelled ? res.nextBatch : 0;
@@ -686,7 +688,7 @@ export default function Studio({
       addLog(`规则拆分 ${baseLines.length} 句，开始 AI 分析角色`);
       let usage = emptyAiUsage();
       try {
-        const extracted = await extractCasts(source);
+        const extracted = await extractCasts(source, `${project?.title || ""} · ${chapter?.title || ""}`);
         usage = addAiUsage(usage, extracted.usage);
         let added = 0;
         for (const c of extracted.casts) {
@@ -704,7 +706,12 @@ export default function Studio({
       }
 
       addLog("开始 AI 标注角色、情绪和语速");
-      const { next, casts, changed, res } = await applyAnnotation(baseLines, baseCasts, 0);
+      const { next, casts, changed, res } = await applyAnnotation(
+        baseLines,
+        baseCasts,
+        0,
+        `${project?.title || ""} · ${chapter?.title || ""}`
+      );
       usage = addAiUsage(usage, res.usage);
       saveLines(next, casts);
       setCurrent(next[0]?.id ?? 1);
@@ -854,6 +861,29 @@ export default function Studio({
       let processed = 0;
       let stopped = false;
 
+      addLog("先分析整本角色表");
+      try {
+        const bookSource = project.chapters.map((c) => c.source).filter(Boolean).join("\n\n");
+        if (bookSource.trim()) {
+          const allCasts = await extractCasts(bookSource, project.title);
+          usage = addAiUsage(usage, allCasts.usage);
+          let added = 0;
+          for (const c of allCasts.casts) {
+            if (isRealCharacter(c.name) && !casts.some((x) => x.name === c.name)) {
+              casts.push({
+                ...newCast(c.name),
+                desc: [c.gender, c.age, c.desc].filter(Boolean).join(" · ") || "待匹配音色",
+              });
+              known.add(c.name);
+              added += 1;
+            }
+          }
+          addLog(`整本角色分析：新增 ${added} 个`);
+        }
+      } catch (e) {
+        addLog(`整本角色分析失败，继续逐章：${(e as Error).message}`);
+      }
+
       for (let i = 0; i < project.chapters.length; i++) {
         if (genStopRef.current) {
           stopped = true;
@@ -878,7 +908,10 @@ export default function Studio({
         );
 
         try {
-          const extracted = await extractCasts(src.source || "");
+          const extracted = await extractCasts(
+            src.source || "",
+            `${project.title} · ${src.title}`
+          );
           usage = addAiUsage(usage, extracted.usage);
           for (const c of extracted.casts) {
             if (isRealCharacter(c.name) && !casts.some((x) => x.name === c.name)) {
@@ -893,7 +926,8 @@ export default function Studio({
           const { next, casts: nextCasts, changed, res } = await applyAnnotation(
             srcLines,
             casts,
-            0
+            0,
+            `${project.title} · ${src.title}`
           );
           usage = addAiUsage(usage, res.usage);
           casts = nextCasts;
@@ -1388,9 +1422,7 @@ export default function Studio({
             onClick={
               genState === "generating"
                 ? stopGenerate
-                : script.some((l) => l.audio)
-                  ? () => setGenDialog(true)
-                  : () => void generateBatch("pending")
+                : () => setGenDialog(true)
             }
           >
             {genState === "generating" ? "取消生成" : "生成"}
@@ -2006,6 +2038,9 @@ export default function Studio({
               <button className="modal-close" onClick={() => setGenDialog(false)}>✕</button>
             </div>
             <div className="modal-body">
+              <p className="tool-help" style={{ marginBottom: 12 }}>
+                生成音频：按角色绑定的音色调用云 TTS 或本地 IndexTTS，不会改台词。已有音频会保留上一版，可随时切换回退。
+              </p>
               <button
                 className="edit-option"
                 disabled={!pendingCount}

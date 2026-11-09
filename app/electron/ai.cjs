@@ -19,6 +19,14 @@ const DEFAULTS = {
     model: "tts-1",
     voice: "alloy",
   },
+  qwenTts: {
+    enabled: false,
+    baseUrl: "https://dashscope.aliyuncs.com",
+    apiKey: "",
+    model: "qwen3-tts-flash",
+    voice: "Cherry",
+    languageType: "Chinese",
+  },
   mimoTts: {
     baseUrl: "https://api.xiaomimimo.com/v1",
     apiKey: "",
@@ -107,6 +115,7 @@ function readAiConfig() {
     prompts: { ...DEFAULTS.prompts, ...(saved.prompts || {}) },
     cloudProviders: { ...DEFAULTS.cloudProviders, ...(saved.cloudProviders || {}) },
     customTts: { ...DEFAULTS.customTts, ...(saved.customTts || {}) },
+    qwenTts: { ...DEFAULTS.qwenTts, ...(saved.qwenTts || {}) },
     mimoTts: { ...DEFAULTS.mimoTts, ...(saved.mimoTts || {}) },
     apiKey: saved.apiKey || process.env.MIMO_API_KEY || "",
   };
@@ -122,6 +131,10 @@ function writeAiConfig(cfg) {
   next.customTts = {
     ...DEFAULTS.customTts,
     ...(cfg.customTts || next.customTts || {}),
+  };
+  next.qwenTts = {
+    ...DEFAULTS.qwenTts,
+    ...(cfg.qwenTts || next.qwenTts || {}),
   };
   next.mimoTts = {
     ...DEFAULTS.mimoTts,
@@ -246,9 +259,13 @@ const SYSTEM_PROMPT = `你是小说章节识别器。只识别章节结构，不
 只返回 JSON，不附带任何解释：
 {"chapters":[{"title":"第一章 雨夜","start":"雨声压低了整条巷子，"}]}`;
 
-async function detectChapters(text, onProgress, toc = []) {
+async function detectChapters(text, onProgress, toc = [], workTitle = "") {
   const source = String(text || "").trim();
   if (!source) throw new Error("文本为空");
+
+  const titleHint = String(workTitle || "").trim()
+    ? `作品名：${String(workTitle).trim()}\n\n`
+    : "";
 
   const tocTitles = (Array.isArray(toc) ? toc : [])
     .map((title) => String(title || "").trim())
@@ -280,7 +297,7 @@ async function detectChapters(text, onProgress, toc = []) {
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `${tocHint}请识别下面这段原文的章节结构：\n\n${chunks[i].text}`,
+            content: `${titleHint}${tocHint}请识别下面这段原文的章节结构：\n\n${chunks[i].text}`,
           },
         ],
         { signal: detectAbort.signal }
@@ -325,8 +342,9 @@ async function detectChapters(text, onProgress, toc = []) {
 const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给你一章已经拆好的台词，每句有 id、speaker、text。
 
 任务：
-1. 找出说话人标错或标成「未知」的句子，根据上下文判断真实说话人。
-2. speaker 只能从给定的角色列表里选，实在判断不了就保留「未知」。
+1. 先通读整章台词，分析人物关系、称呼、语气和上下文，再判断每句说话人。
+2. 找出说话人标错或标成「未知」的句子，根据上下文判断真实说话人。
+3. speaker 只能从给定的角色列表里选，实在判断不了就保留「未知」。
 3. speaker 是「旁白」的句子是叙述文字，不要改成角色。
 4. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
 5. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
@@ -337,12 +355,13 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
    - 英文：said、asked、replied、answered、whispered、shouted、muttered、added；引号 ""、''。
    - 日文：言った、聞いた、答えた、叫んだ、呟いた、笑った；引号 「」、『』。
 9. 中文引号里的对话，如果前后没有「某某说」，根据称呼、语气和上下文判断说话人；判断不了就保留「未知」。
-10. 只返回需要修改的句子，不要返回全部。
+10. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
+11. 只返回需要修改的句子，不要返回全部。
 
 只返回 JSON，不要解释：
 {"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
 
-async function annotateLines(lines, casts, onProgress, startBatch = 0) {
+async function annotateLines(lines, casts, onProgress, startBatch = 0, context = "") {
   const list = Array.isArray(lines) ? lines : [];
   if (!list.length) return { changes: [], cancelled: false, nextBatch: 0, usage: emptyUsage() };
 
@@ -369,6 +388,7 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
       });
 
       const payload = {
+        context: String(context || ""),
         casts: names,
         lines: batches[i].map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       };
@@ -416,7 +436,8 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
 const CAST_PROMPT = `你是小说角色分析器。读下面这段原文，列出真正有台词的人物。
 
 规则：
-1. 只列人物。作者、插画、制作信息、目录、简介、出版社、译者、编辑、页码、数字、旁白都不是角色。
+1. 先通读全文，分析人物关系、称呼和对话标记，再列出真正有台词的人物。
+2. 只列人物。作者、插画、制作信息、目录、简介、出版社、译者、编辑、页码、数字、旁白都不是角色。
 2. 不要把叙述中的句子片段当人名。以下都不是名字：「她回」「他想」「江宁一愣」「声音里带」「江宁回过神」「他忽然」「妈妈在二楼」。
 3. 角色名应该是 2-6 个汉字（日式长名可以到 6 个），或首字母大写的英文名；不要带动作、副词、语气词、标点或整句话。
 4. 同一人物只出现一次，用原文中最常用的称呼。
@@ -424,14 +445,16 @@ const CAST_PROMPT = `你是小说角色分析器。读下面这段原文，列�
    - 中文：说、道、问、答、喊、叫、笑道、低声、开口、回答、补充、嘀咕、嘟囔；引号 “”、『』、「」、""。
    - 英文：said、asked、replied、answered、whispered、shouted、muttered、added；引号 ""、''。
    - 日文：言った、聞いた、答えた、叫んだ、呟いた、笑った；引号 「」、『』。
-6. 没有「某某说」的对话，根据称呼、语气和上下文推断说话人；同一段连续对话尽量归给在场人物。
+6. 没有名字但有台词的人物，用「OL女性」「店员」「路人男生」这类身份描述，不要编造人名。
+7. 没有「某某说」的对话，根据称呼、语气和上下文推断说话人；同一段连续对话尽量归给在场人物。
 7. gender 只能是：男、女、未知；age 只能是：少年、青年、中年、老年、未知；desc 不超过 12 个字。
 8. 没有可识别角色就返回空数组。
+9. 如果用户给了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不要把其他作品的角色混进来。
 
 只返回 JSON，不要解释：
 {"casts":[{"name":"堀北","gender":"女","age":"青年","desc":"冷静强势"}]}`;
 
-async function extractCasts(text, onProgress) {
+async function extractCasts(text, onProgress, context = "") {
   const source = String(text || "").trim();
   if (!source) return [];
 
@@ -451,7 +474,7 @@ async function extractCasts(text, onProgress) {
       const { data, usage: chunkUsage } = await chatJSON(
         [
           { role: "system", content: CAST_PROMPT },
-          { role: "user", content: chunks[i].text },
+          { role: "user", content: `${context ? `作品/章节：${context}\n\n` : ""}${chunks[i].text}` },
         ],
         { signal: detectAbort.signal, maxTokens: 4096 }
       );

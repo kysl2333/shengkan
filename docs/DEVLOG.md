@@ -15,6 +15,10 @@
 - 播放器和历史播放恢复；播放条总时长、拖动、0.5-3.0 倍速
 - 句中短引号不再拆台词；新增 `paragraph` 段号并显示在台词标签
 - AI 分章提示词禁止纯数字/页码/小节标题；支持传入 EPUB 目录
+- AI 提示词带书名和章节名；已出版作品可结合 AI 已知角色名
+- 整本角色标注先做整本角色预分析；无名字路人允许 OL女性/店员 这类身份名
+- 千问 TTS（DashScope）接入：qwen3-tts-flash / qwen-audio-*，支持 rate
+- 自定义 OpenAI 兼容 TTS 支持 speed
 - EPUB TOC 解析增强，导入界面显示目录条数，目录存在时不再自动跑 AI
 - AI 服务商可选 MiMo/千问百炼/DeepSeek/自定义；MiMo TTS 配置独立
 - 自定义 OpenAI 兼容 TTS `/audio/speech`

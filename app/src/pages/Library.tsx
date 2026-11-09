@@ -247,7 +247,8 @@ export default function Library({
         try {
           const result = await detectChapters(
             book.text,
-            book.chapters.map((c) => c.title).filter(Boolean)
+            book.chapters.map((c) => c.title).filter(Boolean),
+            book.title
           );
           const marks = result.marks;
           const next = applyAiChapters(book.text, marks);
@@ -330,7 +331,8 @@ export default function Library({
     try {
       const result = await detectChapters(
         text,
-        baseChapters.map((c) => c.title).filter(Boolean)
+        baseChapters.map((c) => c.title).filter(Boolean),
+        name.trim() || "未命名"
       );
       const marks = result.marks;
       const next = applyAiChapters(text, marks);

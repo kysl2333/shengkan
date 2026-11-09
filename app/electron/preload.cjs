@@ -23,10 +23,11 @@ contextBridge.exposeInMainWorld("shengkan", {
     set: (cfg) => ipcRenderer.invoke("ai:config:set", cfg),
     test: () => ipcRenderer.invoke("ai:test"),
     defaults: () => ipcRenderer.invoke("ai:default-prompts"),
-    detectChapters: (text, toc) => ipcRenderer.invoke("ai:detect-chapters", text, toc),
+    detectChapters: (text, toc, workTitle) => ipcRenderer.invoke("ai:detect-chapters", text, toc, workTitle),
     cancel: () => ipcRenderer.invoke("ai:cancel-detect"),
-    annotate: (lines, casts, startBatch) => ipcRenderer.invoke("ai:annotate-lines", lines, casts, startBatch),
-    extractCasts: (text) => ipcRenderer.invoke("ai:extract-casts", text),
+    annotate: (lines, casts, startBatch, context) =>
+      ipcRenderer.invoke("ai:annotate-lines", lines, casts, startBatch, context),
+    extractCasts: (text, context) => ipcRenderer.invoke("ai:extract-casts", text, context),
     onProgress: (cb) => {
       const listener = (_event, progress) => cb(progress);
       ipcRenderer.on("ai:progress", listener);

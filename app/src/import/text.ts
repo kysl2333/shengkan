@@ -157,6 +157,9 @@ const ALLOWED_APPELLATIONS = new Set([
   "管家", "女仆", "执事", "同学", "学长", "学姐", "学弟", "学妹",
 ]);
 
+const ROLE_DESCRIPTOR =
+  /^(OL|上班族|店员|服务员|路人|同学|男生|女生|男人|女人|老人|少女|少年|青年|中年|老师|医生|护士|司机|警察|军官|士兵|管家|女仆|执事|店主|老板|乘客|工作人员|主持人|记者|律师|学生|学姐|学长)(男性|女性|男人|女人|男生|女生|少年|少女|青年|中年|老年|老人)?$/;
+
 const BAD_START = new Set(
   "他她它我你您咱这那其此谁每各某有没不别要会能可是在把被让给对从到跟与为以而但却并且或者所因虽如若由忽突又还也都就才只很太更最再已曾正刚快慢轻重低大小多少好坏看听想说问答喊笑走跑站坐躺拿放伸转抬压装帮替叫变完起停回过出进上下拉来去声音话语心眼嘴脸头身口脚日月天年时分秒含随神先见作后面人己哑指一道".split("")
 );
@@ -171,6 +174,7 @@ export function isRealCharacter(name: string) {
   if (NON_CHARACTER.test(clean)) return false;
   if (/^\d+$/.test(clean)) return false;
   if (/^[A-Za-z][A-Za-z .'-]{1,20}$/.test(clean)) return true;
+  if (ROLE_DESCRIPTOR.test(clean)) return true;
   if (!/^[\u4e00-\u9fa5]{2,6}$/.test(clean)) return false;
   if (ALLOWED_APPELLATIONS.has(clean)) return true;
   if (BAD_START.has(clean[0])) return false;

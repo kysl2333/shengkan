@@ -15,6 +15,14 @@ export interface AiConfig {
     model?: string;
     voice?: string;
   };
+  qwenTts?: {
+    enabled?: boolean;
+    baseUrl?: string;
+    apiKey?: string;
+    model?: string;
+    voice?: string;
+    languageType?: string;
+  };
   mimoTts?: {
     baseUrl?: string;
     apiKey?: string;
@@ -145,22 +153,27 @@ export async function cancelAi(): Promise<boolean> {
 export async function annotateLines(
   lines: AnnotateInput[],
   casts: string[],
-  startBatch = 0
+  startBatch = 0,
+  context = ""
 ): Promise<AnnotateResult> {
   const b = bridge();
   if (!b) throw new Error("AI 标注只在桌面版可用");
-  return b.annotate(lines, casts, startBatch);
+  return b.annotate(lines, casts, startBatch, context);
 }
 
-export async function extractCasts(text: string): Promise<ExtractedCastResult> {
+export async function extractCasts(text: string, context = ""): Promise<ExtractedCastResult> {
   const b = bridge();
   if (!b) throw new Error("AI 角色分析只在桌面版可用");
-  return b.extractCasts(text);
+  return b.extractCasts(text, context);
 }
 
-export async function detectChapters(text: string, toc: string[] = []): Promise<AiChapterResult> {
+export async function detectChapters(
+  text: string,
+  toc: string[] = [],
+  workTitle = ""
+): Promise<AiChapterResult> {
   const b = bridge();
-  if (b) return b.detectChapters(text, toc);
+  if (b) return b.detectChapters(text, toc, workTitle);
 
   const cfg = await getAiConfig();
   if (!cfg.apiKey) throw new Error("还没有配置 API Key");
@@ -185,9 +198,11 @@ export async function detectChapters(text: string, toc: string[] = []): Promise<
         },
         {
           role: "user",
-          content: toc.length
-            ? `出版社目录（优先按这些标题在正文定位，不要新增目录外章节）：\n${toc.slice(0, 120).join("\n")}\n\n${text}`
-            : text,
+          content: `${workTitle ? `作品名：${workTitle}\n\n` : ""}${
+            toc.length
+              ? `出版社目录（优先按这些标题在正文定位，不要新增目录外章节）：\n${toc.slice(0, 120).join("\n")}\n\n`
+              : ""
+          }${text}`,
         },
       ],
     }),

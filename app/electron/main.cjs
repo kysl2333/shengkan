@@ -24,29 +24,31 @@ ipcMain.handle("ai:config:set", (_event, cfg) => ai.writeAiConfig(cfg));
 ipcMain.handle("ai:test", () => ai.testConnection());
 ipcMain.handle("ai:default-prompts", () => ai.defaultPrompts());
 ipcMain.handle("ai:cancel-detect", () => ai.cancelDetect());
-ipcMain.handle("ai:detect-chapters", (event, text, toc) =>
+ipcMain.handle("ai:detect-chapters", (event, text, toc, workTitle) =>
   ai.detectChapters(
     text,
     (progress) => {
       if (!event.sender.isDestroyed()) event.sender.send("ai:progress", progress);
     },
-    toc
+    toc,
+    workTitle
   )
 );
-ipcMain.handle("ai:annotate-lines", (event, lines, casts, startBatch) =>
+ipcMain.handle("ai:annotate-lines", (event, lines, casts, startBatch, context) =>
   ai.annotateLines(
     lines,
     casts,
     (progress) => {
       if (!event.sender.isDestroyed()) event.sender.send("ai:progress", progress);
     },
-    startBatch
+    startBatch,
+    context
   )
 );
-ipcMain.handle("ai:extract-casts", (event, text) =>
+ipcMain.handle("ai:extract-casts", (event, text, context) =>
   ai.extractCasts(text, (progress) => {
     if (!event.sender.isDestroyed()) event.sender.send("ai:progress", progress);
-  })
+  }, context)
 );
 ipcMain.handle("cloud:list", () => cloud.list());
 ipcMain.handle("cloud:providers", () => cloud.providers());

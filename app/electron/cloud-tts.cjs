@@ -128,10 +128,29 @@ function customTtsEnabled() {
   return !!(cfg.enabled && cfg.baseUrl && cfg.model && cfg.voice);
 }
 
+function qwenTtsConfig() {
+  try {
+    return ai.readAiConfig().qwenTts || {};
+  } catch {
+    return {};
+  }
+}
+
+function qwenTtsEnabled() {
+  const cfg = qwenTtsConfig();
+  return !!(cfg.enabled && cfg.apiKey && cfg.model && cfg.voice);
+}
+
 function assertProvider(id = "mimo") {
   if (id === "custom") {
     if (!customTtsEnabled()) {
       throw new Error("自定义 TTS 还没配置完整，请到设置 → AI 服务里填写地址、模型和音色");
+    }
+    return;
+  }
+  if (id === "qwen") {
+    if (!qwenTtsEnabled()) {
+      throw new Error("千问 TTS 还没配置完整，请到设置 → AI 服务里填写 DashScope Key、模型和音色");
     }
     return;
   }
@@ -142,6 +161,16 @@ function assertProvider(id = "mimo") {
 
 function providers() {
   const list = [...PROVIDERS];
+  if (qwenTtsEnabled()) {
+    const cfg = qwenTtsConfig();
+    list.push({
+      id: "qwen",
+      name: "千问 TTS",
+      models: [`qwen:${cfg.model}`],
+      designModel: "",
+      enabled: true,
+    });
+  }
   if (customTtsEnabled()) {
     const cfg = customTtsConfig();
     list.push({
@@ -230,10 +259,23 @@ function findLocalSample(id) {
 }
 
 function list() {
-  if (!providerEnabled("mimo") && !customTtsEnabled()) return [];
+  if (!providerEnabled("mimo") && !qwenTtsEnabled() && !customTtsEnabled()) return [];
   const all = [];
   if (providerEnabled("mimo")) {
     all.push(...PRESETS, ...readCloud().map((item) => ({ ...item, provider: "mimo" })));
+  }
+  if (qwenTtsEnabled()) {
+    const cfg = qwenTtsConfig();
+    all.push({
+      id: "qwen-tts",
+      name: "千问 TTS",
+      desc: `千问 TTS · ${cfg.model}`,
+      provider: "qwen",
+      model: `qwen:${cfg.model}`,
+      voice: cfg.voice,
+      gender: "",
+      age: "",
+    });
   }
   if (customTtsEnabled()) {
     const cfg = customTtsConfig();
@@ -349,6 +391,56 @@ function instructionFor(payload) {
   return "";
 }
 
+async function qwenSynthesize(payload, text, model) {
+  assertProvider("qwen");
+  const cfg = qwenTtsConfig();
+  const baseUrl = String(cfg.baseUrl || "https://dashscope.aliyuncs.com").replace(/\/+$/, "");
+  const voice = String(payload.voice || cfg.voice || "");
+  const input = {
+    text,
+    voice,
+    language_type: cfg.languageType || "Chinese",
+  };
+  if (model.includes("qwen-audio") && payload.speed) {
+    input.rate = Math.min(2, Math.max(0.5, Number(payload.speed) || 1));
+  }
+
+  const r = await fetch(`${baseUrl}/api/v1/services/aigc/multimodal-generation/generation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({ model, input }),
+    signal: AbortSignal.timeout(180000),
+  });
+  const raw = await r.text();
+  let data = null;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    /* 非 JSON */
+  }
+  if (!r.ok || data?.code) {
+    throw new Error(`千问 TTS 请求失败：${data?.message || raw.slice(0, 300)}`);
+  }
+  const audio = data?.output?.audio;
+  if (!audio?.url && !audio?.data) throw new Error("千问 TTS 没有返回音频");
+
+  let buf;
+  if (audio.url) {
+    const file = await fetch(audio.url, { signal: AbortSignal.timeout(120000) });
+    if (!file.ok) throw new Error(`下载千问音频失败：HTTP ${file.status}`);
+    buf = Buffer.from(await file.arrayBuffer());
+  } else {
+    buf = Buffer.from(String(audio.data), "base64");
+  }
+  fs.mkdirSync(OUT, { recursive: true });
+  const name = `qwen-${crypto.randomUUID()}.wav`;
+  fs.writeFileSync(path.join(OUT, name), buf);
+  return { file: path.join(OUT, name), url: `/v1/audio/${name}` };
+}
+
 async function customSynthesize(payload, text, model) {
   assertProvider("custom");
   const cfg = customTtsConfig();
@@ -367,6 +459,7 @@ async function customSynthesize(payload, text, model) {
       input: text,
       voice,
       response_format: "wav",
+      ...(payload.speed ? { speed: Math.min(2, Math.max(0.5, Number(payload.speed))) } : {}),
     }),
     signal: AbortSignal.timeout(180000),
   });
@@ -386,6 +479,9 @@ async function synthesize(payload) {
   if (!text) throw new Error("text 不能为空");
 
   const model = payload.model || "mimo-v2.5-tts";
+  if (model.startsWith("qwen:")) {
+    return qwenSynthesize(payload, text, model.slice("qwen:".length));
+  }
   if (model.startsWith("custom:")) {
     return customSynthesize(payload, text, model.slice("custom:".length));
   }

@@ -36,6 +36,7 @@ function VoiceWave() {
 
 function cloudGroup(voice: CloudVoice) {
   if (voice.provider === "custom") return "自定义 TTS";
+  if (voice.provider === "qwen") return "千问 TTS";
   return voice.model.includes("voiceclone") ? "设计音色" : "小米预置";
 }
 
@@ -285,8 +286,8 @@ export default function Cast({
   }
 
   async function editCloud(voice: CloudVoice) {
-    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom") {
-      window.alert("预置音色和自定义 TTS 请在设置 → AI 服务里修改");
+    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom" || voice.provider === "qwen") {
+      window.alert("预置音色、千问 TTS 和自定义 TTS 请在设置 → AI 服务里修改");
       return;
     }
     const value = await askVoiceEdit(voice.name, voice.desc || "");
@@ -425,8 +426,8 @@ export default function Cast({
   }
 
   async function removeCloud(voice: CloudVoice) {
-    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom") {
-      window.alert("预置音色和自定义 TTS 不能从这里删除；自定义 TTS 请到设置里关闭。");
+    if (voice.model === "mimo-v2.5-tts" || voice.provider === "custom" || voice.provider === "qwen") {
+      window.alert("预置音色、千问 TTS 和自定义 TTS 不能从这里删除；请到设置里关闭。");
       return;
     }
     if (!window.confirm(`删除云音色「${voice.name}」？\n\n音频会移到 voices/.trash，不会永久删除；已经克隆到本地的副本不受影响。`)) return;
@@ -815,8 +816,8 @@ export default function Cast({
                         <div className="voice-tags">
                           {v.gender && <span>{v.gender}</span>}
                           {v.age && <span>{v.age}</span>}
-                          <span>{v.provider === "custom" ? "自定义" : "小米"}</span>
-                          <span>{v.provider === "custom" ? "TTS" : v.model.includes("voiceclone") ? "设计" : "预置"}</span>
+                          <span>{v.provider === "custom" ? "自定义" : v.provider === "qwen" ? "千问" : "小米"}</span>
+                          <span>{v.provider === "custom" || v.provider === "qwen" ? "TTS" : v.model.includes("voiceclone") ? "设计" : "预置"}</span>
                           {v.localPath && <span>本地库</span>}
                         </div>
                         <VoiceWave />
@@ -842,7 +843,7 @@ export default function Cast({
                           >
                             {v.localPath ? "已在本地库" : "加入本地音色库"}
                           </button>
-                          {v.model !== "mimo-v2.5-tts" && v.provider !== "custom" && (
+                          {v.model !== "mimo-v2.5-tts" && v.provider !== "custom" && v.provider !== "qwen" && (
                             <>
                               <button className="voice-edit" onClick={() => editCloud(v)}>编辑</button>
                               <button className="voice-del" onClick={() => removeCloud(v)}>删除</button>

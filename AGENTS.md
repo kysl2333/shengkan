@@ -191,6 +191,10 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 语速滑块和数字输入对云 TTS、本地 IndexTTS 都生效；不要再写「本地不支持语速」。
 - AI 服务商存在 `ai.json` 的 `provider / baseUrl / model / apiKey`；MiMo TTS 单独用 `mimoTts`，不要复用其他服务商的 Key。
 - 自定义 TTS 是 OpenAI 兼容 `/audio/speech`，配置在 `customTts`，云音色卡片用 `custom:` 前缀的 model 区分。
+- 千问 TTS 走 DashScope 原生 `multimodal-generation`，配置在 `qwenTts`，model 用 `qwen:` 前缀；不要塞进 OpenAI 兼容接口。
+- AI 分章/角色分析/标注要带书名和章节名 context；已出版作品可以结合 AI 已知角色名，但不确定必须保留「未知」。
+- 没有名字但有台词的路人允许用「OL女性」「店员」这类身份描述，不要强行编人名。
+- 整本角色标注先做整本角色预分析，再逐章标注；不要只按当前章节猜名字。
 - `/v1/audio/` 的 Node 代理必须先 `decodeURIComponent(url.pathname)` 再取 basename，否则中文导出文件会 404。
 - 规则拆句遇到句中短引号（如「假睡」）要合并回旁白；只有独立成段、带说话标记或长引文才当台词。
 - 台词保留 `paragraph` 段号，工作台显示「第 N 段」，不要丢掉原文分段。

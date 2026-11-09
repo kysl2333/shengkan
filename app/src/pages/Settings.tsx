@@ -264,6 +264,93 @@ export default function Settings() {
 
               <div
                 className="check-row"
+                style={{ cursor: "pointer", marginTop: 10 }}
+                onClick={() =>
+                  aiCfg &&
+                  setAiCfg({
+                    ...aiCfg,
+                    qwenTts: { ...aiCfg.qwenTts, enabled: !aiCfg.qwenTts?.enabled },
+                  })
+                }
+              >
+                <span className={`check ${aiCfg?.qwenTts?.enabled ? "on" : ""}`}>
+                  {aiCfg?.qwenTts?.enabled ? "✓" : " "}
+                </span>
+                启用千问 TTS（DashScope）
+              </div>
+              {aiCfg?.qwenTts?.enabled && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+                  <Row label="DashScope API Key" help="百炼控制台的 API Key。">
+                    <input
+                      className="input"
+                      type="password"
+                      value={aiCfg.qwenTts?.apiKey ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          qwenTts: { ...aiCfg.qwenTts, apiKey: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="DashScope 地址" help="默认 https://dashscope.aliyuncs.com。">
+                    <input
+                      className="input"
+                      value={aiCfg.qwenTts?.baseUrl ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          qwenTts: { ...aiCfg.qwenTts, baseUrl: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="千问 TTS 模型" help="例如 qwen3-tts-flash、qwen-audio-3.1-tts-flash。">
+                    <input
+                      className="input"
+                      value={aiCfg.qwenTts?.model ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          qwenTts: { ...aiCfg.qwenTts, model: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="千问 TTS 音色" help="例如 Cherry、longanhuan_v3.6，具体看百炼音色列表。">
+                    <input
+                      className="input"
+                      value={aiCfg.qwenTts?.voice ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          qwenTts: { ...aiCfg.qwenTts, voice: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                  <Row label="语言" help="Chinese / English / Japanese / Auto 等。">
+                    <input
+                      className="input"
+                      value={aiCfg.qwenTts?.languageType ?? ""}
+                      onChange={(e) =>
+                        aiCfg &&
+                        setAiCfg({
+                          ...aiCfg,
+                          qwenTts: { ...aiCfg.qwenTts, languageType: e.target.value },
+                        })
+                      }
+                    />
+                  </Row>
+                </div>
+              )}
+
+              <div
+                className="check-row"
                 style={{ cursor: "pointer", marginTop: 8 }}
                 onClick={() =>
                   aiCfg &&
