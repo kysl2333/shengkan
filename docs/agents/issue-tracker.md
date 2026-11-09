@@ -32,5 +32,5 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 ## 声栞 specifics
 
 - 项目文件在 `projects/<目录>/project.json`，用户数据不进 Git。
-- 当前两个项目 `p-mw7phvqs`、`p-mw81gv9b` 在 `projects/.trash/`，需要先在应用回收站还原，MCP 才能读活动项目。
+- 当前活动项目是 `p-mw91apwo`；`p-mw7phvqs`、`p-mw81gv9b` 在 `projects/.trash/`，需要先在应用回收站还原。
 - 与 MCP 相关的工单同时记录 `mcp/README.md` 和 `docs/agents/` 下的配置说明。

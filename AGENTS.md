@@ -43,7 +43,7 @@ IndexTTS WebUI (192.168.3.68:7860)
 
 可选：engine/server.py → 本机 IndexTTS 2.5
 
-云 TTS：小米 MiMo TTS（预置 / 文本设计 / 音频克隆）
+云 TTS：小米 MiMo / 千问 TTS（DashScope）/ 自定义 OpenAI 兼容
    │  角色绑定 cloudVoice 时，Electron 主进程 cloud-tts.cjs 直接调用
    ▼
 engine/outputs/*.wav
@@ -107,11 +107,12 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 | `app/src/pages/Studio.tsx` | 工作台、台词编辑、章节管理、勾选/单句生成、AI 重拆、播放器 |
 | `app/src/pages/Cast.tsx` | 角色管理、音色绑定、音色播放/暂停 |
 | `app/src/pages/Settings.tsx` | AI 配置、提示词、引擎配置、开发日志 |
-| `app/src/import/epub.ts` | EPUB 解析 |
+| `app/src/import/epub.ts` | EPUB 解析、目录锚点、tocCount |
+| `app/src/import/docx.ts` | DOCX 段落提取 |
 | `app/src/import/text.ts` | 编码识别、规则分章、角色名过滤、AI 章节标记落地 |
-| `app/src/ai.ts` | 渲染端 AI 桥接 |
-| `app/electron/ai.cjs` | MiMo 配置、分章、角色标注、角色提取、分块、取消 |
-| `app/electron/cloud-tts.cjs` | 小米云 TTS：预置音色、文本设计、克隆 |
+| `app/src/ai.ts` | 渲染端 AI 桥接、token usage |
+| `app/electron/ai.cjs` | AI 服务商配置、分章、角色标注、角色提取、分块、取消 |
+| `app/electron/cloud-tts.cjs` | 小米 MiMo / 千问 TTS / 自定义 TTS、预置音色、克隆 |
 | `app/src/cloud.ts` | 渲染端云音色桥接 |
 | `app/electron/log.cjs` | 文件日志 |
 | `app/electron/projects.cjs` | 项目 JSON 读写、回收站 |
@@ -121,21 +122,21 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 
 ## 导入和 AI
 
-- 支持 `.txt / .md / .epub`，项目库整页可拖，其他页面拖入会切到项目库。
+- 支持 `.txt / .md / .epub / .docx`，项目库整页可拖，其他页面拖入会切到项目库。
 - TXT 编码顺序：BOM → UTF-8 严格 → GBK → UTF-8 宽松。
-- EPUB 走 `container.xml → OPF → spine`，标题取 EPUB3 nav 或 EPUB2 NCX。
+- EPUB 走 `container.xml → OPF → spine`，标题取 EPUB3 nav 或 EPUB2 NCX；返回 `tocCount` 供导入页判断目录是否存在。
 - **EPUB 必须按目录锚点切分，不能按文件切**。一个 XHTML 里可能有多章。
 - 文件导入后保留 `baseChapters`。「自动识别」优先恢复它，只有直接粘贴文本时才重新跑规则；否则会把 EPUB 目录覆盖成 1 章。
 - 规则分章认：`第X章/回/节/卷`、序章、楔子、引子、前言、后记、尾声、终章、番外、`Chapter N`。
 - AI 分章只识别「章」级结构，制作信息、目录、简介、登场人物、插图页要在提示词和后处理里过滤。
 - AI 分章只返回「标题 + 正文起始片段」，本地按片段在原文定位切分。**不要改成让模型返回正文**。
-- 模型：`mimo-v2.6-flash`，Base URL `https://api.xiaomimimo.com/v1`，`response_format: json_object`，请求头用 `api-key`。
-- **MiMo 请求必须带 `thinking: { type: "disabled" }`**。默认开启思考时，reasoning 会吃光 `max_completion_tokens`，`message.content` 为空。
+- AI 分章、角色分析、标注要带书名/章节名 context；用户可选择 MiMo、千问百炼、DeepSeek 或自定义。
+- MiMo 的 Base URL 是 `https://api.xiaomimimo.com/v1`，`response_format: json_object`，请求头用 `api-key`；**MiMo 仍要带 `thinking: { type: "disabled" }`**，非 MiMo 服务商不要发这个字段。
 - 超长文本按 15 万字符分块，每块独立识别，再按全局偏移合并。
 - 角色识别必须有「名字 + 说/道/问/答/喊/笑…」或「句首短名 + 冒号」，不能把引号前任意短词当名字。
-- 角色列表用 `isRealCharacter` 过滤作者、插画、制作信息、目录、译者等非人物。
+- 角色列表用 `isRealCharacter` 过滤作者、插画、制作信息、目录、译者等非人物；无名字路人允许「OL女性」「店员」这类身份名。
 - 「AI 重拆本章」先 `extractCasts` 分析本章角色，再 `annotateLines` 标注角色、情绪、语速。
-- 「整本 AI 重拆」先分析整本角色表，再逐章拆分和标注，逐章保存、可停止。
+- 整本角色标注会先做一次整本角色预分析，再逐章标注；整本重拆章节只用规则，不碰角色。
 - AI 标注按 60 句一批，支持停止和从批次续跑。
 - 提示词存在 `userData/ai.json` 的 `prompts.chapter` / `prompts.annotate`；留空用内置。
 
@@ -156,13 +157,14 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 所有 MCP 修改写 `mcp/data/audit.jsonl`。
 - 云音色通过 `ProjectCast.cloudModel/cloudVoice/cloudName` 绑定；绑定本地音色时必须清空这三个字段。
 - 小米云 TTS 用 `mimo-v2.5-tts`（预置）、`mimo-v2.5-tts-voicedesign`（设计）、`mimo-v2.5-tts-voiceclone`（克隆）。
+- 千问 TTS 走 DashScope 原生 `multimodal-generation`，model 用 `qwen:` 前缀；自定义 TTS 走 OpenAI 兼容 `/audio/speech`，model 用 `custom:` 前缀。
 - 预置云音色是内置的，不能删除或改名；前端隐藏编辑/删除，`cloud-tts.cjs` 的 `remove/update` 也会拒绝。
 - `ai.cjs` 的 `suggestVoice` 把用户提示扩写成 `name/description/previewText`；`designPreview` 在传入 `prompt` 时调用它。
 - AI 生成的音色和手动设计的音色都保存到 `voices/cloud`，绑定角色时用 voiceclone。
-- 云音色「本地克隆」由 `cloud-tts.cjs` 的 `materialize` 完成：把样本复制到 `voices/<名字>-<id>.wav`，返回 `localPath`（文件名）。前端把 `voicePath` 设为 `localPath`，并清空 `cloudModel/cloudVoice/cloudName`，生成时走 IndexTTS。
+- 云音色「加入本地音色库」由 `cloud-tts.cjs` 的 `materialize` 完成：把样本复制到 `voices/<名字>-<id>.wav`，返回 `localPath`（文件名）。前端把 `voicePath` 设为 `localPath`，并清空 `cloudModel/cloudVoice/cloudName`，生成时走 IndexTTS。
 - 本地样本按 `-<音色 id>.wav` 后缀查找，不要用 `localSample(name, id)` 重新拼路径，音色改名后会找不到。
 - 设计音色必须走「预览 → 保存」：`designPreview` 只写 `voices/.preview`，`saveDesign` 才写入 `cloud.json` 和 `meta.json`。取消不能落库。
-- `/v1/voices` 只扫描本地音色，跳过 `voices/cloud`。设计音色保存后先在云音色列表，点「本地克隆」才复制到 `voices/` 并进入本地音色列表。
+- `/v1/voices` 只扫描本地音色，跳过 `voices/cloud`。设计音色保存后先在云音色列表，点「加入本地音色库」才复制到 `voices/` 并进入本地音色列表。
 - 删除音色统一移到 `voices/.trash`，不永久删除。本地音色用 `/v1/voice-delete`，云音色用 `cloud.remove`。
 - 云音色和本地音色分开：`/v1/voices` 不扫描 `voices/cloud`。`materialize` 会把云样本复制到 `voices/<名字>-<id>.wav`，删除云不影响本地副本。
 - Electron 不支持 `window.prompt`，会返回 null。所有需要输入的地方用 `app/src/prompt.ts` 的 `askText`，不要用 `window.prompt`。
@@ -227,9 +229,9 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 远端 WebUI 关掉后生成报连接失败，拆章和导入不受影响。
 - `release/` 里的安装包是旧构建，改了代码要重新 `npm run dist`。
 - 旧项目不会自动过滤 EPUB 版权页；需要重新导入，或对正文章节用「AI 重拆本章」。
-- 旧项目里的假角色不会自动消失，用角色页「清理无效角色」或「整本 AI 重拆」重建。
+- 旧项目里的假角色不会自动消失，用角色页「清理无效角色」或「整本角色标注」重建。
 - MCP 默认读最近修改的项目，可用 `project` 参数指定 id 或标题。
-- 整本 AI 重拆会调用很多次，3974 句会跑很久，也会消耗较多 token。
+- 整本角色标注会调用很多次 AI，3974 句会跑很久，也会消耗较多 token；token 统计会在结束时弹窗显示。
 
 ## 验证
 
@@ -242,7 +244,7 @@ npm.cmd run build
 
 涉及导入时，用一个小 EPUB 走一遍：拖入 → 预览章数和标题 → 导入 → 工作台能看到章节和台词。
 
-涉及 AI 时，设置页「测试」会真实请求一次 MiMo，别反复点。
+涉及 AI 时，设置页「测试」会真实请求当前 AI 服务商一次，别反复点。
 
 ## Agent skills
 

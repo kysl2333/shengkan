@@ -107,4 +107,4 @@ node server.mjs
 
 改完配置需要重启 OpenCode 才会重新拉起 MCP。仍然红点时看 OpenCode 的 MCP 日志，通常是 `Cannot find package '@modelcontextprotocol/sdk'`，重跑 `npm.cmd install` 即可。
 
-当前两个项目在 `projects/.trash/`，MCP 的 `list_projects` 默认会返回 0 个活动项目；先在声栞项目库还原 `p-mw7phvqs` 再使用。
+当前活动项目是 `p-mw91apwo`。`p-mw7phvqs` 和 `p-mw81gv9b` 在 `projects/.trash/`，MCP 默认只列活动项目；需要在应用回收站还原后才能读写。
