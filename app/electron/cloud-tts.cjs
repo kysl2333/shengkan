@@ -15,8 +15,7 @@ const PREVIEW_DIR = path.join(VOICES, ".preview");
 const META_FILE = path.join(VOICES, "meta.json");
 const TRASH_DIR = path.join(VOICES, ".trash");
 
-const PRESETS = [
-  {
+const PRESETS = [  {
     id: "mimo-bingtang",
     name: "冰糖",
     desc: "小米预置 · 中文女声 · 清亮自然",
@@ -98,6 +97,37 @@ const PRESETS = [
   },
 ];
 
+const PROVIDERS = [
+  {
+    id: "mimo",
+    name: "小米 MiMo",
+    models: ["mimo-v2.5-tts", "mimo-v2.5-tts-voiceclone"],
+    designModel: "mimo-v2.5-tts-voicedesign",
+  },
+];
+
+function providerEnabled(id) {
+  try {
+    const cfg = ai.readAiConfig();
+    return cfg.cloudProviders?.[id] !== false;
+  } catch {
+    return true;
+  }
+}
+
+function assertProvider(id = "mimo") {
+  if (!providerEnabled(id)) {
+    throw new Error("小米 MiMo 云 TTS 已在设置里关闭，请到设置 → AI 服务里打开");
+  }
+}
+
+function providers() {
+  return PROVIDERS.map((provider) => ({
+    ...provider,
+    enabled: providerEnabled(provider.id),
+  }));
+}
+
 function readCloud() {
   try {
     return JSON.parse(fs.readFileSync(CLOUD_JSON, "utf8").replace(/^\uFEFF/, ""));
@@ -170,6 +200,7 @@ function findLocalSample(id) {
 }
 
 function list() {
+  if (!providerEnabled("mimo")) return [];
   const all = [
     ...PRESETS,
     ...readCloud().map((item) => ({ ...item, provider: "mimo" })),
@@ -196,7 +227,9 @@ async function materialize(id) {
     let src = item.voice;
     if (!src || !path.isAbsolute(src) || !fs.existsSync(src)) {
       const isEnglish = ["mimo-mia", "mimo-chloe", "mimo-milo", "mimo-dean"].includes(item.id);
-      const text = isEnglish ? "Hello, this is a voice sample." : "你好，这是音色样本。";
+      const text = isEnglish
+        ? "Hello, this is a voice sample. Take your time, and let's have a natural conversation."
+        : "你好，这是音色样本。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。";
       const r = await synthesize({ text, model: item.model, voice: item.voice });
       src = r.file;
     }
@@ -271,6 +304,7 @@ function instructionFor(payload) {
 }
 
 async function synthesize(payload) {
+  assertProvider("mimo");
   const text = String(payload.text || "").trim();
   if (!text) throw new Error("text 不能为空");
 
@@ -304,6 +338,10 @@ async function synthesize(payload) {
 }
 
 async function designPreview(payload) {
+  assertProvider("mimo");
+  if (payload.provider && payload.provider !== "mimo") {
+    throw new Error(`暂不支持这个云 TTS：${payload.provider}`);
+  }
   let suggestion = null;
   let description = String(payload.description || "").trim();
   let previewText = String(payload.previewText || "").trim();
@@ -316,7 +354,9 @@ async function designPreview(payload) {
     name = name || suggestion.name;
   }
   if (!description) throw new Error("请填写音色描述");
-  if (!previewText) previewText = "你好，这是音色试听。";
+  if (!previewText) {
+    previewText = "你好，这是音色试听。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。";
+  }
 
   const buf = await chatAudio({
     model: "mimo-v2.5-tts-voicedesign",
@@ -427,6 +467,7 @@ function update(id, payload) {
 
 module.exports = {
   list,
+  providers,
   synthesize,
   designPreview,
   saveDesign,

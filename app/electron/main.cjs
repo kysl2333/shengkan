@@ -45,6 +45,7 @@ ipcMain.handle("ai:extract-casts", (event, text) =>
   })
 );
 ipcMain.handle("cloud:list", () => cloud.list());
+ipcMain.handle("cloud:providers", () => cloud.providers());
 ipcMain.handle("cloud:tts", (_event, payload) => cloud.synthesize(payload));
 ipcMain.handle("cloud:design-preview", (_event, payload) => cloud.designPreview(payload));
 ipcMain.handle("cloud:save-design", (_event, payload) => cloud.saveDesign(payload));
@@ -77,7 +78,7 @@ function createWindow() {
     win.show();
   });
 
-  win.webContents.setZoomFactor(1.25);
+  win.webContents.setZoomFactor(1.3);
 
   const devUrl = process.env.SHENGKAN_DEV_URL;
   const indexFile = path.join(__dirname, "..", "dist", "index.html");

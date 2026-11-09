@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getVoices, splitText, synthesize, audioUrl, deleteAudio } from "../api";
 import { annotateLines, cancelAi, onAiProgress, extractCasts } from "../ai";
 import { cloudTTS } from "../cloud";
-import { isRealCharacter } from "../import";
+import { isRealCharacter, refineSpeakers } from "../import";
 import { log } from "../log";
 import { askText } from "../prompt";
-import { castVoiceLabel, type Project, type ProjectCast, type ProjectChapter, type ProjectLine } from "../projects";
+import { castVoiceLabel, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
 
 type View = "lines" | "source";
 type TaskState = "idle" | "running" | "done" | "checked";
@@ -39,9 +39,13 @@ function formatClock(seconds: number) {
 export default function Studio({
   project,
   onSave,
+  action,
+  onActionDone,
 }: {
   project: Project | null;
   onSave: (p: Project) => void;
+  action?: ProjectAction | null;
+  onActionDone?: () => void;
 }) {
   const [chapterId, setChapterId] = useState(project?.chapters[0]?.id ?? "");
   const chapter = project?.chapters.find((c) => c.id === chapterId) ?? project?.chapters[0];
@@ -77,6 +81,7 @@ export default function Studio({
   const [roleMenu, setRoleMenu] = useState(false);
   const annBatchRef = useRef(0);
   const genStopRef = useRef(false);
+  const ranActionRef = useRef("");
 
   useEffect(() => {
     const first = project?.chapters[0];
@@ -90,6 +95,20 @@ export default function Studio({
     const c = project?.chapters.find((x) => x.id === chapterId);
     if (c) setScript(c.lines);
   }, [chapterId, project?.chapters]);
+
+  useEffect(() => {
+    if (!action) {
+      ranActionRef.current = "";
+      return;
+    }
+    if (!project) return;
+    const key = `${project.id}:${action}`;
+    if (ranActionRef.current === key) return;
+    ranActionRef.current = key;
+    if (action === "rebuild") void rebuildAllLines(true);
+    else void annotateAllChapters(true);
+    onActionDone?.();
+  }, [action, project?.id]);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -148,10 +167,7 @@ export default function Studio({
     .sort((a, b) => {
       if (a.name === "旁白") return 1;
       if (b.name === "旁白") return -1;
-      return (
-        script.filter((l) => l.speaker === b.name).length -
-        script.filter((l) => l.speaker === a.name).length
-      );
+      return 0;
     });
 
   const wave = useMemo(
@@ -462,6 +478,7 @@ export default function Studio({
         status: "pending" as const,
         audio: "",
       }));
+      refineSpeakers(lines, (project?.casts ?? []).map((c) => c.name));
 
       const base = project?.casts ?? [];
       const casts = [...base];
@@ -609,6 +626,7 @@ export default function Studio({
         status: "pending",
         audio: "",
       }));
+      refineSpeakers(baseLines, (project?.casts ?? []).map((c) => c.name));
 
       const baseCasts = [...(project?.casts ?? [])];
       for (const line of baseLines) {
@@ -665,9 +683,14 @@ export default function Studio({
     }
   }
 
-  async function rebuildAllLines() {
+  async function rebuildAllLines(skipConfirm = false) {
     if (!project || annotating) return;
-    if (!window.confirm(`会重新拆分全部 ${project.chapters.length} 章的台词，只拆句，不分析角色。继续？`)) return;
+    if (
+      !skipConfirm &&
+      !window.confirm(`会重新拆分全部 ${project.chapters.length} 章，只按章节标记拆台词，不新增、不删除、不改名任何角色。继续？`)
+    ) {
+      return;
+    }
 
     genStopRef.current = false;
     setAnnotating(true);
@@ -678,7 +701,8 @@ export default function Studio({
 
     try {
       const chapters: ProjectChapter[] = [];
-      const casts = [...(project.casts ?? [])];
+      const casts = project.casts ?? [];
+      const known = new Set(casts.map((c) => c.name));
       let totalLines = 0;
       let stopped = false;
 
@@ -710,36 +734,32 @@ export default function Studio({
           status: "pending",
           audio: "",
         }));
-
         for (const line of lines) {
-          if (isRealCharacter(line.speaker) && !casts.some((c) => c.name === line.speaker)) {
-            casts.push(newCast(line.speaker));
-          }
+          if (line.speaker !== "旁白" && !known.has(line.speaker)) line.speaker = "未知";
         }
 
         chapters.push({ ...src, lines });
         totalLines += lines.length;
         onSave({
           ...project,
-          casts,
           chapters: [...chapters, ...project.chapters.slice(i + 1)],
         });
       }
 
       const rest = project.chapters.slice(chapters.length);
-      onSave({ ...project, casts, chapters: [...chapters, ...rest] });
+      onSave({ ...project, chapters: [...chapters, ...rest] });
       if (chapters[0]) setChapterId(chapters[0].id);
       addLog(
         stopped
-          ? `整本拆台词已停止：${chapters.length} 章 · ${totalLines} 句`
-          : `整本拆台词完成：${chapters.length} 章 · ${totalLines} 句`
+          ? `整本拆章节已停止：${chapters.length} 章 · ${totalLines} 句`
+          : `整本拆章节完成：${chapters.length} 章 · ${totalLines} 句 · 角色未改动`
       );
       setTask(stopped ? "idle" : "done");
-      log("ai", "整本拆台词完成", { chapters: chapters.length, lines: totalLines, stopped });
+      log("ai", "整本拆章节完成", { chapters: chapters.length, lines: totalLines, stopped });
     } catch (e) {
-      addLog(`整本拆台词失败：${(e as Error).message}`);
+      addLog(`整本拆章节失败：${(e as Error).message}`);
       setTask("idle");
-      log("ai", "整本拆台词失败", { error: (e as Error).message });
+      log("ai", "整本拆章节失败", { error: (e as Error).message });
     } finally {
       off();
       setAnnotating(false);
@@ -748,11 +768,12 @@ export default function Studio({
     }
   }
 
-  async function annotateAllChapters() {
+  async function annotateAllChapters(skipConfirm = false) {
     if (!project || annotating) return;
     if (
+      !skipConfirm &&
       !window.confirm(
-        `会逐章分析角色、情绪和语速，跳过没有「未知」的章节。章节多时会调用很多次 AI，可以随时停止。继续？`
+        `会逐章分析角色、情绪和语速，章节多时会调用很多次 AI，可以随时停止。继续？`
       )
     ) {
       return;
@@ -766,7 +787,10 @@ export default function Studio({
     const off = onAiProgress((p) => setAiMsg(p.message));
 
     try {
-      let casts = [...(project.casts ?? [])];
+      let casts = (project.casts ?? []).filter(
+        (c) => c.name === "旁白" || isRealCharacter(c.name)
+      );
+      const known = new Set(casts.map((c) => c.name));
       const chapters: ProjectChapter[] = [];
       let changedTotal = 0;
       let processed = 0;
@@ -782,10 +806,18 @@ export default function Studio({
         setAiMsg(`第 ${i + 1}/${project.chapters.length} 章 · ${src.title}`);
         setAiProgress({ done: i, total: project.chapters.length });
 
-        if (!src.lines.length || !src.lines.some((l) => l.speaker === "未知")) {
+        if (!src.lines.length) {
           chapters.push(src);
           continue;
         }
+
+        const srcLines = src.lines.map((line) =>
+          line.speaker === "旁白" ||
+          line.speaker === "未知" ||
+          known.has(line.speaker)
+            ? line
+            : { ...line, speaker: "未知" }
+        );
 
         try {
           const extracted = await extractCasts(src.source || "");
@@ -795,11 +827,12 @@ export default function Studio({
                 ...newCast(c.name),
                 desc: [c.gender, c.age, c.desc].filter(Boolean).join(" · ") || "待匹配音色",
               });
+              known.add(c.name);
             }
           }
 
           const { next, casts: nextCasts, changed, res } = await applyAnnotation(
-            src.lines,
+            srcLines,
             casts,
             0
           );
@@ -1518,7 +1551,7 @@ export default function Studio({
                 </div>
 
                 <p className="tool-help">
-                  规则认不准的说话人会标成「未知」。AI 标注只改说话人、情绪、语速，不重拆台词。整本先拆句，角色可以之后逐章分析。
+                  规则认不准的说话人会标成「未知」。AI 标注只改说话人、情绪、语速，不重拆台词。整本操作在项目库右键「编辑整本」。
                 </p>
 
                 <button
@@ -1541,23 +1574,6 @@ export default function Studio({
                       仅规则重拆
                     </button>
                   )}
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 7 }}>
-                  <button
-                    className="btn small"
-                    onClick={rebuildAllLines}
-                    disabled={annotating}
-                  >
-                    整本拆台词（不分析角色）
-                  </button>
-                  <button
-                    className="btn small"
-                    onClick={annotateAllChapters}
-                    disabled={annotating}
-                  >
-                    整本 AI 标注角色（逐章）
-                  </button>
                 </div>
 
                 {aiMsg || aiProgress.total > 0 ? (
@@ -1608,7 +1624,6 @@ export default function Studio({
                     <div
                       key={c.name}
                       className={`cast-card ${c.name === selected?.speaker ? "active" : ""}`}
-                      onClick={() => selected && changeSpeaker(selected.id, c.name)}
                     >
                       <div className="avatar">{c.initial}</div>
                       <div className="cast-info">
@@ -1617,6 +1632,15 @@ export default function Studio({
                       </div>
                       <span className="cast-count">{count} 句</span>
                       <div className="cast-actions">
+                        <button
+                          title="把当前句换成这个角色"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (selected) changeSpeaker(selected.id, c.name);
+                          }}
+                        >
+                          设为当前句
+                        </button>
                         {c.name !== "未知" && isProjectCast(c.name) && (
                           <button
                             title="解绑音色"

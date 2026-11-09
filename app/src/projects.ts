@@ -59,9 +59,11 @@ export interface TrashSummary extends ProjectSummary {
   deletedAt: string;
 }
 
+export type ProjectAction = "rebuild" | "annotate";
+
 export function castVoiceLabel(cast: ProjectCast) {
   if (cast.cloudName || cast.cloudVoice) {
-    return `云 · ${cast.cloudName || cast.voice || "已绑定"}`;
+    return `云音色 · ${cast.cloudName || cast.voice || "已绑定"}`;
   }
   if (cast.voicePath) return cast.voice || cast.voicePath;
   return "未配音";
@@ -111,12 +113,14 @@ declare global {
       };
       cloud: {
         list: () => Promise<import("./cloud").CloudVoice[]>;
+        providers: () => Promise<import("./cloud").CloudProvider[]>;
         tts: (payload: import("./cloud").CloudTTSPayload) => Promise<{ file: string; url: string }>;
         designPreview: (payload: {
           prompt?: string;
           description?: string;
           previewText?: string;
           name?: string;
+          provider?: string;
         }) => Promise<import("./cloud").CloudDesignPreview>;
         saveDesign: (payload: {
           tempId: string;

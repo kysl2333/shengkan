@@ -6,7 +6,7 @@ import Cast from "./pages/Cast";
 import Master from "./pages/Master";
 import Settings from "./pages/Settings";
 import { splitText } from "./api";
-import { isRealCharacter, type ImportedChapter } from "./import";
+import { refineSpeakers, type ImportedChapter } from "./import";
 import { log } from "./log";
 import {
   listProjects,
@@ -18,6 +18,7 @@ import {
   type ProjectChapter,
   type ProjectLine,
   type ProjectSummary,
+  type ProjectAction,
 } from "./projects";
 
 const CAST_COLORS = ["#C08A4E", "#6E9E96", "#B4685A", "#7E8FA6", "#A88C61", "#8C7AA6"];
@@ -26,6 +27,7 @@ export default function App() {
   const [page, setPage] = useState<PageID>("studio");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
+  const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropped, setDropped] = useState<File | null>(null);
   const dragDepth = useRef(0);
@@ -46,10 +48,11 @@ export default function App() {
       .catch((err) => console.error("加载项目失败", err));
   }, []);
 
-  async function openProject(id: string) {
+  async function openProject(id: string, action?: ProjectAction) {
     try {
       const p = await loadProject(id);
       setProject(p);
+      setPendingAction(action ?? null);
       setPage("studio");
     } catch (err) {
       window.alert(`打开项目失败：${(err as Error).message}`);
@@ -90,7 +93,6 @@ export default function App() {
   ) {
     let p = await createProject(title);
     const chapters: ProjectChapter[] = [];
-    const speakers = new Set<string>(["旁白"]);
 
     for (let i = 0; i < sourceChapters.length; i++) {
       const src = sourceChapters[i];
@@ -99,18 +101,15 @@ export default function App() {
 
       try {
         const r = await splitText(src.body);
-        lines = r.segments.map((s, j) => {
-          if (isRealCharacter(s.speaker)) speakers.add(s.speaker);
-          return {
-            id: j + 1,
-            speaker: s.speaker,
-            text: s.text,
-            emotion: s.emotion || "平静",
-            speed: "正常",
-            status: "pending" as const,
-            audio: "",
-          };
-        });
+        lines = r.segments.map((s, j) => ({
+          id: j + 1,
+          speaker: s.speaker,
+          text: s.text,
+          emotion: s.emotion || "平静",
+          speed: "正常",
+          status: "pending" as const,
+          audio: "",
+        }));
         log("split", "章节拆分完成", {
           chapter: src.title,
           segments: lines.length,
@@ -129,7 +128,19 @@ export default function App() {
       });
     }
 
-    const casts: ProjectCast[] = [...speakers].map((name, i) => ({
+    // 只保留全书出现 2 次以上、且形状像人名的说话人；单次出现的动作片段一律回到「未知」
+    const allLines = chapters.flatMap((chapter) => chapter.lines);
+    refineSpeakers(allLines, [], 2);
+
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const line of allLines) {
+      if (line.speaker === "旁白" || line.speaker === "未知" || seen.has(line.speaker)) continue;
+      seen.add(line.speaker);
+      order.push(line.speaker);
+    }
+
+    const casts: ProjectCast[] = ["旁白", ...order].map((name, i) => ({
       id: `cast-${i + 1}`,
       name,
       initial: name.slice(0, 1),
@@ -194,7 +205,14 @@ export default function App() {
             onDroppedHandled={() => setDropped(null)}
           />
         )}
-        {page === "studio" && <Studio project={project} onSave={persist} />}
+        {page === "studio" && (
+          <Studio
+            project={project}
+            onSave={persist}
+            action={pendingAction}
+            onActionDone={() => setPendingAction(null)}
+          />
+        )}
         {page === "cast" && <Cast project={project} onSave={persist} />}
         {page === "master" && <Master project={project} />}
         {page === "settings" && <Settings />}

@@ -152,6 +152,34 @@ export default function Settings() {
           </div>
 
           <div className="setting-group">
+            <Row
+              label="云 TTS 服务"
+              help="关闭后云音色列表、云生成和设计音色都会停用；已经绑定的角色需要改用本地音色。"
+            >
+              <div
+                className="check-row"
+                style={{ cursor: "pointer" }}
+                onClick={() =>
+                  aiCfg &&
+                  setAiCfg({
+                    ...aiCfg,
+                    cloudProviders: {
+                      ...aiCfg.cloudProviders,
+                      mimo: aiCfg.cloudProviders?.mimo === false,
+                    },
+                  })
+                }
+              >
+                <span className={`check ${aiCfg?.cloudProviders?.mimo !== false ? "on" : ""}`}>
+                  {aiCfg?.cloudProviders?.mimo !== false ? "✓" : " "}
+                </span>
+                小米 MiMo
+              </div>
+              <div className="tool-help">当前只接入了 MiMo；以后新增的云 TTS 会在这里逐个开关。</div>
+            </Row>
+          </div>
+
+          <div className="setting-group">
             <Row label="分章提示词" help="留空用内置。要求模型只返回章节标题和正文起始片段，不要让模型改写正文。">
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <textarea

@@ -167,10 +167,16 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 云音色和本地音色分开：`/v1/voices` 不扫描 `voices/cloud`。`materialize` 会把云样本复制到 `voices/<名字>-<id>.wav`，删除云不影响本地副本。
 - Electron 不支持 `window.prompt`，会返回 null。所有需要输入的地方用 `app/src/prompt.ts` 的 `askText`，不要用 `window.prompt`。
 - 每句台词最多保留 2 个音频：`audio` 是当前使用，`audioHistory` 最多 1 个。生成第三个时删除最旧的未选中版本；重新绑定音色不会删除已有音频。
-- 整本 AI 分两阶段：`rebuildAllLines` 只拆句不分析角色；`annotateAllChapters` 逐章分析角色，跳过没有「未知」的章节。
+- 整本操作在项目库右键「编辑整本」：`rebuildAllLines` 只拆章节不改角色；`annotateAllChapters` 逐章分析角色、情绪、语速，会新增识别到的角色。
 - 角色页管理 `project.casts` 全量角色；工作台右侧「本章角色」从当前章节台词里的 speaker 推导。工作台「移除本章」只把本章台词改成「未知」，不删项目角色。
 - 角色绑定状态统一用 `castVoiceLabel`：云绑定看 `cloudName / cloudVoice`，本地绑定看 `voicePath`，不要只看 `voicePath`。
-- 音色卡片按钮先弹出角色选择，不默认绑定当前选中角色。
+- 音色按钮只作用于左侧当前选中的角色：云/本地都叫「绑定到角色」，再点变成「取消绑定」；不要弹出角色列表。
+- 「加入本地音色库」只复制样本到 `voices/`，不绑定角色；要使用本地 TTS 时再到本地音色卡点「绑定到角色」。
+- 角色名必须过 `isRealCharacter` / `isNameShape`：2-6 个汉字，排除代词、副词、动作片段和「的她着得地过了」这类结尾，不要只按引号前 2-5 字猜。
+- 规则拆分不能把裸「道」当说话动词；「吼道/笑道/接道」会截出假名字，必须用完整动词。
+- 工作台本章角色卡片点击不能直接改当前句；要改说话人必须点显式的「设为当前句」，避免列表重排和误改。
+- 整本重拆章节只拆章节，不新增、不删除、不改名项目角色；整本角色标注才允许新增角色和改情绪/语速。
+- 支持 `.docx` 导入：`app/src/import/docx.ts` 按 `word/document.xml` 的段落提取正文，再走规则分章。
 - 音色库分组：本地音色按 `category`，云音色按 `model`（小米预置 / 设计音色）。
 - EPUB 解析跳过 `img / figure / figcaption`，避免插图说明混进正文。
 - 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。

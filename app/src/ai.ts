@@ -3,6 +3,9 @@ export interface AiConfig {
   model: string;
   apiKey: string;
   autoChapter: boolean;
+  cloudProviders?: {
+    mimo?: boolean;
+  };
   prompts?: {
     chapter?: string;
     annotate?: string;

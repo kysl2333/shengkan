@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld("shengkan", {
   },
   cloud: {
     list: () => ipcRenderer.invoke("cloud:list"),
+    providers: () => ipcRenderer.invoke("cloud:providers"),
     tts: (payload) => ipcRenderer.invoke("cloud:tts", payload),
     designPreview: (payload) => ipcRenderer.invoke("cloud:design-preview", payload),
     saveDesign: (payload) => ipcRenderer.invoke("cloud:save-design", payload),

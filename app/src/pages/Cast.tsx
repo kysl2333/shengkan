@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { getVoices, ENGINE, deleteVoice, updateVoice, type VoiceItem } from "../api";
 import {
   listCloudVoices,
+  listCloudProviders,
   cloudTTS,
   designCloudPreview,
   saveCloudDesign,
@@ -9,11 +10,12 @@ import {
   removeCloudVoice,
   updateCloudVoice,
   type CloudVoice,
+  type CloudProvider,
   type CloudDesignPreview,
 } from "../cloud";
 import { isRealCharacter } from "../import";
 import { log } from "../log";
-import { askText } from "../prompt";
+import { askText, askVoiceEdit } from "../prompt";
 import { castVoiceLabel, type Project } from "../projects";
 
 function VoiceWave() {
@@ -54,6 +56,8 @@ export default function Cast({
   const [menu, setMenu] = useState<{ x: number; y: number; castId: string } | null>(null);
   const [mode, setMode] = useState<"local" | "cloud">("local");
   const [cloudVoices, setCloudVoices] = useState<CloudVoice[]>([]);
+  const [cloudProviders, setCloudProviders] = useState<CloudProvider[]>([]);
+  const [designProvider, setDesignProvider] = useState("mimo");
   const [cloudLoading, setCloudLoading] = useState(false);
   const [cloudPreview, setCloudPreview] = useState("");
   const [designOpen, setDesignOpen] = useState(false);
@@ -66,18 +70,19 @@ export default function Cast({
   const [designError, setDesignError] = useState("");
   const [notice, setNotice] = useState("");
   const designAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [bindMenu, setBindMenu] = useState<null | {
-    x: number;
-    y: number;
-    kind: "local" | "cloud" | "localClone";
-    voice: VoiceItem | CloudVoice;
-  }>(null);
 
   useEffect(() => {
     getVoices()
       .then((r) => setVoices(r.voices))
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
+    listCloudProviders()
+      .then((list) => {
+        setCloudProviders(list);
+        const first = list.find((p) => p.enabled);
+        if (first) setDesignProvider(first.id);
+      })
+      .catch((e) => setError((e as Error).message));
     return () => {
       audioRef.current?.pause();
     };
@@ -99,13 +104,6 @@ export default function Cast({
     return () => window.removeEventListener("click", close);
   }, [menu]);
 
-  useEffect(() => {
-    if (!bindMenu) return;
-    const close = () => setBindMenu(null);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, [bindMenu]);
-
   const allLines = project?.chapters.flatMap((c) => c.lines) ?? [];
   const countFor = (name: string) => allLines.filter((l) => l.speaker === name).length;
   const doneFor = (name: string) =>
@@ -114,7 +112,7 @@ export default function Cast({
   const casts = [...(project?.casts ?? [])].sort((a, b) => {
     if (a.name === "旁白") return 1;
     if (b.name === "旁白") return -1;
-    return countFor(b.name) - countFor(a.name);
+    return 0;
   });
   const selected = casts.find((c) => c.id === selectedId) ?? casts[0] ?? null;
   const menuCast = menu ? casts.find((c) => c.id === menu.castId) : null;
@@ -137,6 +135,7 @@ export default function Cast({
         : true
     )
     .sort((a, b) => cloudGroup(a).localeCompare(cloudGroup(b), "zh-CN"));
+  const enabledProviders = cloudProviders.filter((p) => p.enabled);
 
   function unbind(castId: string) {
     if (!project) return;
@@ -158,107 +157,104 @@ export default function Cast({
     log("cast", "解绑音色", { castId });
   }
 
-  function openBindMenu(
-    kind: "local" | "cloud" | "localClone",
-    voice: VoiceItem | CloudVoice,
-    event: React.MouseEvent<HTMLElement>
-  ) {
-    event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setBindMenu({
-      x: Math.min(rect.left, window.innerWidth - 230),
-      y: Math.min(rect.bottom + 4, window.innerHeight - 300),
-      kind,
-      voice,
+  function bindLocalToSelected(voice: VoiceItem) {
+    if (!project || !selected) return;
+    const bound = selected.voicePath === voice.path && !selected.cloudVoice;
+    onSave({
+      ...project,
+      casts: project.casts.map((c) =>
+        c.id === selected.id
+          ? bound
+            ? {
+                ...c,
+                voicePath: "",
+                voice: "",
+                cloudModel: undefined,
+                cloudVoice: undefined,
+                cloudName: undefined,
+              }
+            : {
+                ...c,
+                voicePath: voice.path,
+                voice: voice.displayName || voice.name,
+                cloudModel: undefined,
+                cloudVoice: undefined,
+                cloudName: undefined,
+              }
+          : c
+      ),
+    });
+    log("cast", bound ? "取消绑定本地音色" : "绑定本地音色", {
+      cast: selected.name,
+      voice: voice.path,
     });
   }
 
-  async function applyBind(castId: string) {
-    if (!project || !bindMenu) return;
-    const menu = bindMenu;
-    setBindMenu(null);
+  function bindCloudToSelected(voice: CloudVoice) {
+    if (!project || !selected) return;
+    const bound = selected.cloudVoice === voice.voice && selected.cloudModel === voice.model;
+    onSave({
+      ...project,
+      casts: project.casts.map((c) =>
+        c.id === selected.id
+          ? bound
+            ? {
+                ...c,
+                voicePath: "",
+                voice: "",
+                cloudModel: undefined,
+                cloudVoice: undefined,
+                cloudName: undefined,
+              }
+            : {
+                ...c,
+                voicePath: "",
+                voice: voice.name,
+                cloudModel: voice.model,
+                cloudVoice: voice.voice,
+                cloudName: voice.name,
+              }
+          : c
+      ),
+    });
+    log("cast", bound ? "取消绑定云音色" : "绑定云音色", {
+      cast: selected.name,
+      voice: voice.name,
+      model: voice.model,
+    });
+  }
 
+  async function addToLocalLibrary(voice: CloudVoice) {
+    if (voice.localPath) {
+      setNotice(`「${voice.name}」已经在本地音色库`);
+      window.setTimeout(() => setNotice(""), 4000);
+      return;
+    }
     try {
-      if (menu.kind === "local") {
-        const voice = menu.voice as VoiceItem;
-        onSave({
-          ...project,
-          casts: project.casts.map((c) =>
-            c.id === castId
-              ? {
-                  ...c,
-                  voicePath: voice.path,
-                  voice: voice.displayName || voice.name,
-                  cloudModel: undefined,
-                  cloudVoice: undefined,
-                  cloudName: undefined,
-                }
-              : c
-          ),
-        });
-      } else if (menu.kind === "cloud") {
-        const voice = menu.voice as CloudVoice;
-        onSave({
-          ...project,
-          casts: project.casts.map((c) =>
-            c.id === castId
-              ? {
-                  ...c,
-                  voicePath: "",
-                  voice: voice.name,
-                  cloudModel: voice.model,
-                  cloudVoice: voice.voice,
-                  cloudName: voice.name,
-                }
-              : c
-          ),
-        });
-      } else {
-        const voice = menu.voice as CloudVoice;
-        const local = await materializeCloudVoice(voice.id);
-        if (!local.localPath) throw new Error("没有生成本地样本");
-        onSave({
-          ...project,
-          casts: project.casts.map((c) =>
-            c.id === castId
-              ? {
-                  ...c,
-                  voicePath: local.localPath!,
-                  voice: voice.name,
-                  cloudModel: undefined,
-                  cloudVoice: undefined,
-                  cloudName: undefined,
-                }
-              : c
-          ),
-        });
-        setVoices((await getVoices()).voices);
-        setNotice(`已把「${voice.name}」保存为本地音色`);
-        window.setTimeout(() => setNotice(""), 5000);
-      }
-      log("cast", "绑定音色到角色", {
-        castId,
-        kind: menu.kind,
-        voice: (menu.voice as { name?: string }).name || "",
-      });
+      const local = await materializeCloudVoice(voice.id);
+      if (!local.localPath) throw new Error("没有生成本地样本");
+      setVoices((await getVoices()).voices);
+      setCloudVoices(await listCloudVoices());
+      setNotice(`已把「${voice.name}」加入本地音色库，可以到「本地音色」里绑定角色`);
+      window.setTimeout(() => setNotice(""), 6000);
+      log("cloud", "加入本地音色库", { id: voice.id, name: voice.name, path: local.localPath });
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
   async function editLocal(voice: VoiceItem) {
-    const name = await askText("音色名称", voice.displayName || voice.name);
-    if (name === null) return;
-    const desc = await askText("音色介绍", voice.desc || "");
-    if (desc === null) return;
-    await updateVoice(voice.path, { name: name.trim(), desc: desc.trim() });
+    const value = await askVoiceEdit(voice.displayName || voice.name, voice.desc || "");
+    if (!value) return;
+    const name = value.name;
+    await updateVoice(voice.path, { name, desc: value.desc });
     if (project) {
       const affected = project.casts.filter((c) => c.voicePath === voice.path);
       if (affected.length) {
         onSave({
           ...project,
           casts: project.casts.map((c) =>
-            c.voicePath === voice.path ? { ...c, voice: name.trim() } : c
+            c.voicePath === voice.path ? { ...c, voice: name } : c
           ),
         });
       }
@@ -271,11 +267,10 @@ export default function Cast({
       window.alert("预置音色不能改名，先保存成设计音色");
       return;
     }
-    const name = await askText("音色名称", voice.name);
-    if (name === null) return;
-    const desc = await askText("音色介绍", voice.desc || "");
-    if (desc === null) return;
-    await updateCloudVoice(voice.id, { name: name.trim(), desc: desc.trim() });
+    const value = await askVoiceEdit(voice.name, voice.desc || "");
+    if (!value) return;
+    const name = value.name;
+    await updateCloudVoice(voice.id, { name, desc: value.desc });
     if (project) {
       const affected = project.casts.filter(
         (c) => c.cloudVoice === voice.voice && c.cloudModel === voice.model
@@ -285,7 +280,7 @@ export default function Cast({
           ...project,
           casts: project.casts.map((c) =>
             affected.some((a) => a.id === c.id)
-              ? { ...c, cloudName: name.trim(), voice: name.trim() }
+              ? { ...c, cloudName: name, voice: name }
               : c
           ),
         });
@@ -320,9 +315,16 @@ export default function Cast({
   }
 
   function openDesign() {
+    if (!enabledProviders.length) {
+      setError("没有启用的云 TTS，请到设置 → AI 服务里打开小米 MiMo");
+      return;
+    }
+    setDesignProvider(enabledProviders[0].id);
     setDesignPrompt("");
     setDesignDesc("");
-    setDesignText("你好，我是这个角色的声音。很高兴见到你。");
+    setDesignText(
+      "你好，我是这个角色的声音。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。"
+    );
     setDesignPreview(null);
     setDesignError("");
     setDesignOpen(true);
@@ -357,8 +359,8 @@ export default function Cast({
     try {
       const payload =
         !useManual && designPrompt.trim()
-          ? { prompt: designPrompt.trim() }
-          : { description: designDesc, previewText: designText };
+          ? { prompt: designPrompt.trim(), provider: designProvider }
+          : { description: designDesc, previewText: designText, provider: designProvider };
       const preview = await designCloudPreview(payload);
       setDesignPreview(preview);
       setDesignDesc(preview.description);
@@ -390,7 +392,7 @@ export default function Cast({
       setCloudVoices(await listCloudVoices());
       setVoices((await getVoices()).voices);
       closeDesign();
-      setNotice(`已保存「${saved.name}」到云音色；需要本地参考音频再点「本地克隆」`);
+      setNotice(`已保存「${saved.name}」到云音色；需要本地参考音频再点「加入本地音色库」`);
       window.setTimeout(() => setNotice(""), 5000);
       log("cloud", "保存设计音色", { id: saved.id, name: saved.name });
     } catch (e) {
@@ -402,7 +404,7 @@ export default function Cast({
 
   async function removeCloud(voice: CloudVoice) {
     if (voice.model === "mimo-v2.5-tts") {
-      window.alert("预置音色是内置的，不能删除。需要本地参考音频请点「本地克隆」。");
+      window.alert("预置音色是内置的，不能删除。需要本地参考音频请点「加入本地音色库」。");
       return;
     }
     if (!window.confirm(`删除云音色「${voice.name}」？\n\n音频会移到 voices/.trash，不会永久删除；已经克隆到本地的副本不受影响。`)) return;
@@ -669,10 +671,12 @@ export default function Cast({
             onChange={(e) => setQ(e.target.value)}
           />
           <span className="voice-hint">
-            {selected ? `正在给「${selected.name}」选音色` : "先在左侧选一个角色"}
+            {selected ? `正在给「${selected.name}」绑定音色，点按钮可取消绑定` : "先在左侧选一个角色"}
           </span>
           {mode === "cloud" && (
-            <button className="btn small" onClick={openDesign}>设计音色</button>
+            <button className="btn small" onClick={openDesign} disabled={!enabledProviders.length}>
+              设计音色卡
+            </button>
           )}
         </div>
 
@@ -716,10 +720,10 @@ export default function Cast({
                       </button>
                       <button
                         className={`voice-use ${bound ? "on" : ""}`}
-                        onClick={(e) => openBindMenu("local", v, e)}
-                        disabled={!project}
+                        onClick={() => bindLocalToSelected(v)}
+                        disabled={!selected}
                       >
-                        {bound ? "已绑定" : "用这个"}
+                        {bound ? "取消绑定" : "绑定到角色"}
                       </button>
                       <button className="voice-edit" onClick={() => editLocal(v)}>编辑</button>
                       <button className="voice-del" onClick={() => removeLocal(v)}>删除</button>
@@ -733,14 +737,13 @@ export default function Cast({
               : cloudFiltered.map((v, index) => {
                     const bound =
                       selected?.cloudModel === v.model && selected?.cloudVoice === v.voice;
-                    const localBound = !!selected?.voicePath && selected.voicePath === v.localPath;
                     return (
                       <Fragment key={v.id}>
                         {(index === 0 ||
                           cloudGroup(cloudFiltered[index - 1]) !== cloudGroup(v)) && (
                           <div className="voice-group-label">{cloudGroup(v)}</div>
                         )}
-                        <div className={`voice-card ${bound || localBound ? "inuse" : ""}`}>
+                        <div className={`voice-card ${bound ? "inuse" : ""}`}>
                         <div className="voice-card-top">
                           <div>
                             <div className="voice-name">{v.name}</div>
@@ -752,6 +755,7 @@ export default function Cast({
                           {v.age && <span>{v.age}</span>}
                           <span>小米</span>
                           <span>{v.model.includes("voiceclone") ? "设计" : "预置"}</span>
+                          {v.localPath && <span>本地库</span>}
                         </div>
                         <VoiceWave />
                         <div className="voice-foot">
@@ -764,17 +768,17 @@ export default function Cast({
                           </button>
                           <button
                             className={`voice-use ${bound ? "on" : ""}`}
-                            onClick={(e) => openBindMenu("cloud", v, e)}
-                            disabled={!project}
+                            onClick={() => bindCloudToSelected(v)}
+                            disabled={!selected}
                           >
-                            {bound ? "云配音中" : "云配音"}
+                            {bound ? "取消绑定" : "绑定到角色"}
                           </button>
                           <button
-                            className={`voice-use ${localBound ? "on" : ""}`}
-                            onClick={(e) => openBindMenu("localClone", v, e)}
-                            disabled={!project || !!cloudPreview}
+                            className={`voice-use ${v.localPath ? "on" : ""}`}
+                            onClick={() => addToLocalLibrary(v)}
+                            disabled={!!cloudPreview || !!v.localPath}
                           >
-                            {localBound ? "本地中" : "本地克隆"}
+                            {v.localPath ? "已在本地库" : "加入本地音色库"}
                           </button>
                           {v.model !== "mimo-v2.5-tts" && (
                             <>
@@ -795,6 +799,13 @@ export default function Cast({
             <p>检查 `voices` 目录，或切到「云音色」用小米预置音色。</p>
           </div>
         )}
+
+        {!cloudLoading && mode === "cloud" && !cloudFiltered.length && (
+          <div className="cast-empty">
+            <p>没有可用的云音色。</p>
+            <p>到设置 → AI 服务里打开云 TTS，或点「设计音色卡」创建一个。</p>
+          </div>
+        )}
       </div>
 
       {designOpen && (
@@ -802,13 +813,30 @@ export default function Cast({
           <div className="modal design-modal">
             <div className="modal-head">
               <div>
-                <div className="modal-title">设计云音色</div>
-                <div className="modal-desc">先试听，满意再保存。取消不会写入音色库。</div>
+                <div className="modal-title">设计音色卡</div>
+                <div className="modal-desc">先试听，满意再保存成云音色卡。取消不会写入音色库。</div>
               </div>
               <button className="modal-close" onClick={() => !designBusy && closeDesign()}>✕</button>
             </div>
 
             <div className="modal-body">
+              <div className="field">
+                <div className="field-label"><span>云 TTS 服务</span></div>
+                <select
+                  className="select"
+                  value={designProvider}
+                  onChange={(e) => setDesignProvider(e.target.value)}
+                  disabled={designBusy || enabledProviders.length <= 1}
+                >
+                  {enabledProviders.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                {!enabledProviders.length && (
+                  <div className="tool-help">没有启用的云 TTS，请到设置 → AI 服务里打开。</div>
+                )}
+              </div>
+
               <div className="field">
                 <div className="field-label">
                   <span>1. 描述你想要的声音</span>
@@ -840,7 +868,7 @@ export default function Cast({
                     <div className="voice-tags">
                       {designPreview.gender && <span>{designPreview.gender}</span>}
                       {designPreview.age && <span>{designPreview.age}</span>}
-                      <span>小米</span>
+                      <span>{cloudProviders.find((p) => p.id === designProvider)?.name || "云 TTS"}</span>
                       <span>设计</span>
                     </div>
                   </div>
@@ -920,32 +948,6 @@ export default function Cast({
             onClick={() => { removeCast(menuCast.name); setMenu(null); }}
           >
             删除角色
-          </button>
-        </div>
-      )}
-
-      {bindMenu && (
-        <div
-          className="context-menu bind-menu"
-          style={{ left: bindMenu.x, top: bindMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div className="context-menu-title">绑定到角色</div>
-          {casts.map((c) => (
-            <button key={c.id} onClick={() => applyBind(c.id)}>
-              <span>{c.name}</span>
-              {c.voice && <span className="bind-current">{c.voice}</span>}
-            </button>
-          ))}
-          <button
-            className="new"
-            onClick={() => {
-              addCast();
-              setBindMenu(null);
-            }}
-          >
-            ＋ 新建角色
           </button>
         </div>
       )}
