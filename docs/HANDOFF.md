@@ -21,7 +21,8 @@
 | 生成 | 代码可用，但 **音色 wav 丢失**，需要恢复 `voices/*.wav` |
 | 音色 | 当前只有 `meta.json`、`cloud.json` 和一条冰糖本地样本 |
 | 项目数据 | `projects/.trash/` 里有 `p-mw7phvqs`（9 章 3 角色）和 `p-mw81gv9b`，需在回收站还原 |
-| MCP | 可用。默认最近修改项目，支持 `project` 参数 |
+| MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；OpenCode 需重启后重新连接 |
+| Git | 已初始化。`main` 基线 `c38a2b2`，日常优化在 `optimize/next` |
 
 ## 事故说明
 
@@ -38,6 +39,17 @@
 ## 启动
 
 双击 `start.bat`。它会检查依赖、按需构建前端，然后启动 Electron。
+
+Git 工作流：
+
+```powershell
+git switch optimize/next   # 日常优化分支
+git status
+git add -A
+git commit -m "fix: 说明改了什么"
+```
+
+`main` 保留稳定基线，`optimize/next` 用来做后续优化；合并回 `main` 前先跑构建。
 
 开发：
 

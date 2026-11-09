@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(here, "data");
-const PROJECTS = path.join(here, "..", "projects");
+const PROJECTS = process.env.SHENGKAN_PROJECTS
+  ? path.resolve(process.env.SHENGKAN_PROJECTS)
+  : path.join(here, "..", "projects");
 const TRASH = path.join(PROJECTS, ".trash");
 const AUDIT = path.join(DATA, "audit.jsonl");
 const ENGINE = process.env.SHENGKAN_ENGINE || "http://127.0.0.1:8290";

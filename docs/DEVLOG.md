@@ -1,5 +1,31 @@
 # 开发记录
 
+## 2026-11-09 · Git 基线和 MCP 红点
+
+### 完成
+
+- 安装 Git for Windows 2.56.0，确认 `git --version` 正常
+- `git init -b main`，提交基线 `c38a2b2`，创建 `optimize/next`
+- `.gitignore` 排除用户数据、音频、构建产物和迁移包
+- 按 `mp-setup-matt-pocock-skills` 写入 `docs/agents/issue-tracker.md`、`docs/agents/domain.md`，并在 `AGENTS.md` 增加 `## Agent skills`
+- MCP 依赖 `mcp/node_modules` 缺失，执行 `npm.cmd install`，安装 95 个包
+- MCP 新增 `list_projects`，修复无活动项目时的 ENOENT，补引擎超时、音频历史和 `note` 字段
+- 删除 `app/src/data.ts`、`app/src/defaultVoices.ts` 到回收站
+
+### 验证
+
+- `node __test-client.mjs`（MCP stdio 客户端）：7 个工具注册成功
+- `list_projects(includeTrash: true)`：2 个回收站项目
+- 临时复制 `p-mw7phvqs__1794154807729/project.json` 测试 `read_project` / `read_lines`：9 章、首章 33 句
+- `npm.cmd run build` 通过
+
+### 坑
+
+- MCP 红点不是配置语法错误，而是 `mcp/node_modules` 不存在；SDK import 失败时进程立即退出，前端只看到红点
+- OpenCode 修改 MCP 配置后必须重启才会重新拉起进程
+- 仓库当前没有 remote；issue tracker 用本地 `.scratch/`，不依赖 GitHub
+- Git 默认 `core.autocrlf` 会把 LF 转 CRLF；已在仓库内设 `core.autocrlf false`
+
 ## 2026-11-09 · 代码审查和 Bug 修复
 
 ### 完成

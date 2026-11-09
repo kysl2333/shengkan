@@ -35,6 +35,18 @@ $env:SHENGKAN_DEV_URL="http://127.0.0.1:5173"
 npx.cmd electron .
 ```
 
+## 版本管理
+
+仓库主分支是 `main`，日常优化在 `optimize/next`。
+
+```powershell
+git switch optimize/next
+git status
+git commit -am "fix: 说明改了什么"
+```
+
+不提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`。每次提交前同步 `CHANGELOG.md` 和 `docs/DEVLOG.md`。
+
 ## 已实现
 
 ### 导入

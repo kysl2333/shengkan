@@ -2,6 +2,39 @@
 
 按时间倒序。每次改动功能、配置结构或启动方式，都在这里加一条。
 
+## 2026-11-09 · Git 基线和 MCP 修复
+
+### Git
+
+- 初始化仓库，主分支 `main`，基线提交 `c38a2b2`
+- 新建日常优化分支 `optimize/next`
+- `.gitignore` 排除 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/` 和旧迁移包
+- 约定每次提交前同步 `CHANGELOG.md` 和 `docs/DEVLOG.md`
+- 安装 Git for Windows 2.56.0
+
+### MCP
+
+- OpenCode 里 `shengkan` 显示红点：根因是 `mcp/node_modules` 不存在，MCP 进程 import SDK 失败直接退出；已执行 `npm.cmd install`
+- MCP 升到 0.2.0，新增 `list_projects`，可列出活动项目或回收站项目
+- 没有活动项目时返回明确提示，不再抛 ENOENT
+- `split_chapter` / `generate_line` 增加引擎超时和可读错误
+- `generate_line` 保留上一版音频到 `audioHistory`，最多 2 个版本
+- `update_line` 支持 `note`，空修改直接拒绝
+- 更新 `mcp/README.md` 的 OpenCode 配置和红点排查步骤
+
+### 工程技能
+
+- 按 `mp-setup-matt-pocock-skills` 增加 `docs/agents/issue-tracker.md`（本地 Markdown）和 `docs/agents/domain.md`（单上下文）
+- `AGENTS.md` 增加 `## Agent skills` 和 Git 工作流
+- `app/src/data.ts`、`app/src/defaultVoices.ts` 已确认无引用，移到回收站
+
+### 验证
+
+- MCP stdio 客户端测试：7 个工具全部注册
+- `list_projects(includeTrash: true)` 返回 2 个回收站项目
+- 用临时项目副本测试 `read_project` / `read_lines`：9 章、首章 33 句
+- `npm.cmd run build` 通过
+
 ## 2026-11-09 · 代码审查：无效代码和 Bug 修复
 
 ### 严重修复
