@@ -55,13 +55,18 @@ ipcMain.handle("cloud:update", (_event, id, payload) => cloud.update(id, payload
 ipcMain.on("log:write", (_event, scope, message, data) => logs.write(scope, message, data));
 ipcMain.handle("log:info", () => logs.info());
 ipcMain.handle("log:open", () => logs.open());
+ipcMain.handle("shell:reveal", (_event, file) => {
+  if (!file || !fs.existsSync(file)) throw new Error(`文件不存在：${file}`);
+  shell.showItemInFolder(file);
+  return { ok: true };
+});
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1180,
-    minHeight: 760,
+    width: 1600,
+    height: 1000,
+    minWidth: 1280,
+    minHeight: 800,
     backgroundColor: "#0f1114",
     title: "声栞",
     autoHideMenuBar: true,
@@ -78,7 +83,7 @@ function createWindow() {
     win.show();
   });
 
-  win.webContents.setZoomFactor(1.3);
+  win.webContents.setZoomFactor(1.6);
 
   const devUrl = process.env.SHENGKAN_DEV_URL;
   const indexFile = path.join(__dirname, "..", "dist", "index.html");

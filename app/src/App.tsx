@@ -106,7 +106,7 @@ export default function App() {
           speaker: s.speaker,
           text: s.text,
           emotion: s.emotion || "平静",
-          speed: "正常",
+          speed: 1,
           status: "pending" as const,
           audio: "",
         }));

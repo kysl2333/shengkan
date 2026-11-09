@@ -68,6 +68,7 @@ export function synthesize(payload: {
   text: string;
   voice: string;
   lang?: string;
+  speed?: number;
   emo_vector?: number[];
   emo_alpha?: number;
   emo_text?: string;
@@ -89,9 +90,17 @@ export function exportAudio(payload: {
     ok: boolean;
     base: string;
     files: { wav: string; srt?: string; stems?: string };
+    file?: string;
     duration: number;
     lines: number;
   }>(`${ENGINE}/v1/export`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function zipAudio(payload: { files: string[]; output_name?: string }) {
+  return json<{ ok: boolean; file: string; url: string; count: number }>(
+    `${ENGINE}/v1/zip`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
 }
 
 export function audioUrl(url: string) {

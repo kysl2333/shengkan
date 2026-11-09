@@ -1,5 +1,39 @@
 # 开发记录
 
+## 2026-11-09 · 生成并发、播放器、成片历史和 160% 界面
+
+### 完成
+
+- 导入弹窗禁止点遮罩关闭，保留上次导入状态
+- 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地串行
+- 生成弹窗：未生成/全部/取消；生成中「取消生成」
+- 试听单句/连续切换；连续播放从当前句往后
+- 播放条增加总时长事件、点击跳转和 0.5-3.0 倍速下拉
+- AI 拆分/标注集中到右侧 `details` 二级菜单
+- 本章角色快速跳转：上下箭头 + 数字输入 + scrollIntoView
+- 语速改成 0.5-2.0 数字，AI/界面/MCP 全部统一
+- 本地 `duration_factor = 1 / speed`，云 TTS 用自然语言倍数
+- 成片导出历史存 `localStorage`，按项目保留；支持整本单轨和整本分章 ZIP
+- `/v1/zip` 新增到 Node 代理和 Python 本机引擎
+- 导出返回绝对 `file`，Electron `shell.showItemInFolder` 定位
+- 角色音色历史 `voiceHistory`，可单条移除
+- 缩放 1.6，窗口 1600×1000
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `tsc --noUnusedLocals --noUnusedParameters` 无报错
+- Node 引擎实测 `/v1/export` 输出中文文件名 WAV/SRT，`/v1/zip` 打包成功
+- Python `server.py` 语法检查通过
+
+### 坑
+
+- `IndexTTS` 的 `duration_factor` 是时长系数，不是语速；语速 1.2 要传 0.833
+- 云 TTS 没有独立 speed 参数，只能写进 user 指令或 SSML，不能假装有接口参数
+- 并发生成时不能在生成前统一标 dirty，否则取消后未生成的好音频也会被当成待生成
+- 导出历史必须存 localStorage，Master 组件切页会卸载，state 会丢
+- 160% 缩放下 Studio 顶栏会换行，需要 `flex-wrap`
+
 ## 2026-11-09 · 角色识别、音色绑定和 Word 导入
 
 ### 根因

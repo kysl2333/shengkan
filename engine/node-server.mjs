@@ -210,7 +210,7 @@ async function discoverApi(force = false) {
   return apiSpec;
 }
 
-function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
+function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText, durationFactor }) {
   const hasVec = vec.some((v) => v > 0);
   let audioCount = 0;
   let textCount = 0;
@@ -232,7 +232,7 @@ function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
     if (match(label, LABELS.weight)) return Number(emoAlpha ?? 0.65);
     if (match(label, LABELS.emoText)) return emoText || "";
     if (match(label, LABELS.maxTokens)) return 120;
-    if (match(label, LABELS.duration)) return 1.0;
+    if (match(label, LABELS.duration)) return durationFactor;
 
     for (let i = 0; i < LABELS.vec.length; i++) {
       if (match(label, LABELS.vec[i])) return vec[i];
@@ -248,7 +248,7 @@ function buildData(spec, { remoteVoice, text, lang, vec, emoAlpha, emoText }) {
   });
 }
 
-async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH" }) {
+async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH", speed = 1 }) {
   const local = resolveVoice(voice);
   const remoteVoice = await uploadVoice(local);
 
@@ -256,6 +256,8 @@ async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH
     Array.isArray(emoVector) && emoVector.length === 8
       ? emoVector.map((v) => Number(v) || 0)
       : [0, 0, 0, 0, 0, 0, 0, 0];
+  const rate = Math.min(2, Math.max(0.5, Number(speed) || 1));
+  const durationFactor = 1 / rate;
 
   const spec = await discoverApi();
   const data = buildData(spec, {
@@ -265,6 +267,7 @@ async function remoteTTS({ text, voice, emoVector, emoAlpha, emoText, lang = "ZH
     vec,
     emoAlpha,
     emoText,
+    durationFactor,
   });
 
   const call = await fetch(`${GRADIO}/gradio_api/call/${GRADIO_API}`, {
@@ -634,6 +637,7 @@ const server = http.createServer(async (req, res) => {
         emoAlpha: body.emo_alpha,
         emoText: body.emo_text,
         lang: body.lang || "ZH",
+        speed: body.speed,
       });
       return json(res, { ok: true, ...r, mode: "gradio" });
     }
@@ -743,8 +747,32 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         base,
         files,
+        file: path.join(OUT, `${base}.wav`),
         duration: Math.round((master.length / TARGET_SR) * 100) / 100,
         lines: clips.length,
+      });
+    }
+
+    if (url.pathname === "/v1/zip" && req.method === "POST") {
+      const body = await readBody(req);
+      const names = Array.isArray(body.files) ? body.files : [];
+      if (!names.length) return json(res, { error: "files 不能为空" }, 400);
+      const base = safeOutputName(body.output_name, "bundle");
+      const entries = [];
+      for (const name of names) {
+        const file = path.join(OUT, path.basename(String(name || "")));
+        if (fs.existsSync(file)) {
+          entries.push({ name: path.basename(file), data: fs.readFileSync(file) });
+        }
+      }
+      if (!entries.length) return json(res, { error: "没有可打包的音频" }, 400);
+      const zipPath = path.join(OUT, `${base}.zip`);
+      writeZip(zipPath, entries);
+      return json(res, {
+        ok: true,
+        file: zipPath,
+        url: `/v1/audio/${base}.zip`,
+        count: entries.length,
       });
     }
 

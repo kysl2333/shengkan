@@ -19,6 +19,14 @@ const DEFAULTS = {
 const CHUNK_CHARS = 150000;
 const TIMEOUT_MS = 300000;
 
+const SPEED_LABELS = { 很慢: 0.6, 慢: 0.8, 稍慢: 0.9, 正常: 1, 快: 1.2 };
+
+function normalizeSpeed(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.min(2, Math.max(0.5, numeric));
+  return SPEED_LABELS[String(value || "").trim()] ?? 1;
+}
+
 let detectAbort = null;
 
 function configFile() {
@@ -230,7 +238,7 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 2. speaker 只能从给定的角色列表里选，实在判断不了就保留「未知」。
 3. speaker 是「旁白」的句子是叙述文字，不要改成角色。
 4. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
-5. 同时给出语速，只能从：很慢、慢、正常、稍慢、快 里选。
+5. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
 6. 只把真正有台词的人物当角色。作者、插画、制作信息、目录、简介、出版社、译者、编辑、页码、数字不是角色。
 7. 不要把「她回」「他想」「江宁一愣」「声音里带」「江宁回过神」这类动作或叙述片段当角色名。
 8. 对话标记要同时支持：
@@ -241,7 +249,7 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 10. 只返回需要修改的句子，不要返回全部。
 
 只返回 JSON，不要解释：
-{"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":"正常"}]}`;
+{"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
 
 async function annotateLines(lines, casts, onProgress, startBatch = 0) {
   const list = Array.isArray(lines) ? lines : [];
@@ -285,7 +293,7 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0) {
         const id = Number(item?.id);
         const speaker = String(item?.speaker || "").trim();
         const emotion = String(item?.emotion || "").trim();
-        const speed = String(item?.speed || "").trim();
+        const speed = normalizeSpeed(item?.speed);
         if (!id) continue;
         if (speaker && speaker !== "未知" && !names.includes(speaker) && speaker !== "旁白") continue;
         changes.push({ id, speaker, emotion, speed });

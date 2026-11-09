@@ -21,6 +21,14 @@ const PROJECT_ARG = z
   .optional()
   .describe("项目 id 或标题，不填用最近修改的项目");
 
+const SPEED_LABELS = { 很慢: 0.6, 慢: 0.8, 稍慢: 0.9, 正常: 1, 快: 1.2 };
+
+function normalizeSpeed(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.min(2, Math.max(0.5, numeric));
+  return SPEED_LABELS[String(value || "").trim()] ?? 1;
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
 }
@@ -227,7 +235,7 @@ server.tool(
     const p = readProject(project);
     const c = p.chapters.find((x) => x.id === chapterId);
     if (!c) return { ...text(`章节不存在: ${chapterId}`), isError: true };
-    return text(c.lines);
+    return text(c.lines.map((line) => ({ ...line, speed: normalizeSpeed(line.speed) })));
   }
 );
 
@@ -240,7 +248,7 @@ server.tool(
     text: z.string().optional(),
     speaker: z.string().optional(),
     emotion: z.string().optional(),
-    speed: z.string().optional(),
+    speed: z.number().optional().describe("语速 0.5-2.0，1 是正常"),
     note: z.string().optional(),
     project: PROJECT_ARG,
   },
@@ -264,7 +272,7 @@ server.tool(
     if (newText !== undefined) line.text = newText;
     if (speaker !== undefined) line.speaker = speaker;
     if (emotion !== undefined) line.emotion = emotion;
-    if (speed !== undefined) line.speed = speed;
+    if (speed !== undefined) line.speed = normalizeSpeed(speed);
     if (note !== undefined) line.note = note;
     line.status = "dirty";
 
@@ -309,6 +317,7 @@ server.tool(
         text: line.text,
         voice: voicePath,
         lang: "ZH",
+        speed: normalizeSpeed(line.speed),
       });
 
       const history = [...(line.audioHistory || [])];

@@ -5,7 +5,7 @@ import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
 import { log } from "../log";
 import { askText } from "../prompt";
-import { castVoiceLabel, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
+import { castVoiceLabel, pushCastVoiceHistory, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
 
 type View = "lines" | "source";
 type TaskState = "idle" | "running" | "done" | "checked";
@@ -36,6 +36,18 @@ function formatClock(seconds: number) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(workers);
+}
+
 export default function Studio({
   project,
   onSave,
@@ -56,7 +68,7 @@ export default function Studio({
   const [current, setCurrent] = useState(1);
   const [task, setTask] = useState<TaskState>("idle");
   const [logs, setLogs] = useState<string[]>([]);
-  const [speed, setSpeed] = useState("稍慢");
+  const [speed, setSpeed] = useState(1);
   const [genState, setGenState] = useState<"idle" | "generating" | "done" | "error">("idle");
   const [genMsg, setGenMsg] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
@@ -72,12 +84,14 @@ export default function Studio({
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioRate, setAudioRate] = useState(1);
+  const [auditionMode, setAuditionMode] = useState<"single" | "continuous">("single");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [editingSource, setEditingSource] = useState(false);
   const [sourceDraft, setSourceDraft] = useState("");
   const [lineStatus, setLineStatus] = useState<Record<number, "generating" | "error" | "">>({});
   const [toast, setToast] = useState("");
+  const [genDialog, setGenDialog] = useState(false);
   const [roleMenu, setRoleMenu] = useState(false);
   const annBatchRef = useRef(0);
   const genStopRef = useRef(false);
@@ -147,6 +161,10 @@ export default function Studio({
   const selected = script.find((l) => l.id === current) ?? script[0];
   const selectedCast = castList.find((c) => c.name === selected?.speaker);
   const unknownCount = script.filter((l) => l.speaker === "未知").length;
+  const pendingCount = script.filter(
+    (l) => l.text.trim() && (l.status !== "done" || !l.audio)
+  ).length;
+  const allCount = script.filter((l) => l.text.trim()).length;
   const chapterCastNames = [...new Set(script.map((l) => l.speaker))];
   const isProjectCast = (name: string) => project?.casts.some((c) => c.name === name) ?? false;
   const chapterCasts: ProjectCast[] = chapterCastNames
@@ -245,8 +263,28 @@ export default function Studio({
     };
   }
 
-  function changeSpeaker(lineId: number, name: string) {
-    const clean = name.trim();
+  function jumpRoleTo(name: string, index: number) {
+    const ids = script.filter((l) => l.speaker === name).map((l) => l.id);
+    if (!ids.length) return;
+    const at = Math.max(0, Math.min(ids.length - 1, index));
+    const id = ids[at];
+    setCurrent(id);
+    setSpeakerFor(null);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`line-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    log("edit", "跳转到角色台词", { name, lineId: id, index: at + 1 });
+  }
+
+  function jumpRole(name: string, dir: 1 | -1) {
+    const ids = script.filter((l) => l.speaker === name).map((l) => l.id);
+    if (!ids.length) return;
+    const at = ids.indexOf(current);
+    const next = at < 0 ? (dir > 0 ? 0 : ids.length - 1) : (at + dir + ids.length) % ids.length;
+    jumpRoleTo(name, next);
+  }
+
+  function changeSpeaker(lineId: number, name: string) {    const clean = name.trim();
     if (!clean) return;
     const base = project?.casts ?? castList;
     const casts = base.some((c) => c.name === clean) ? undefined : [...base, newCast(clean)];
@@ -275,7 +313,7 @@ export default function Studio({
       speaker: clean,
       text: "",
       emotion: "平静",
-      speed: "正常",
+      speed: 1,
       status: "pending",
       audio: "",
     };
@@ -308,6 +346,7 @@ export default function Studio({
         c.name === name
           ? {
               ...c,
+              voiceHistory: pushCastVoiceHistory(c),
               voicePath: "",
               voice: "",
               cloudModel: undefined,
@@ -327,7 +366,7 @@ export default function Studio({
       speaker: "旁白",
       text: "",
       emotion: "平静",
-      speed: "正常",
+      speed: 1,
       status: "pending",
       audio: "",
     };
@@ -358,7 +397,7 @@ export default function Studio({
       speaker: selected?.speaker || "旁白",
       text: "",
       emotion: "平静",
-      speed: "正常",
+      speed: 1,
       status: "pending",
       audio: "",
     };
@@ -474,7 +513,7 @@ export default function Studio({
         speaker: s.speaker,
         text: s.text,
         emotion: s.emotion || "平静",
-        speed: "正常",
+        speed: 1,
         status: "pending" as const,
         audio: "",
       }));
@@ -518,7 +557,9 @@ export default function Studio({
           ? hit.speaker
           : l.speaker;
       const emotion = hit.emotion || l.emotion;
-      const speedValue = ["很慢", "慢", "正常", "稍慢", "快"].includes(hit.speed) ? hit.speed : l.speed;
+      const speedValue = Number.isFinite(Number(hit.speed))
+        ? Math.min(2, Math.max(0.5, Number(hit.speed)))
+        : l.speed;
       if (speaker === l.speaker && emotion === l.emotion && speedValue === l.speed) return l;
       changed += 1;
       return { ...l, speaker, emotion, speed: speedValue, status: "dirty" as const };
@@ -622,7 +663,7 @@ export default function Studio({
         speaker: s.speaker,
         text: s.text,
         emotion: s.emotion || "平静",
-        speed: "正常",
+        speed: 1,
         status: "pending",
         audio: "",
       }));
@@ -730,7 +771,7 @@ export default function Studio({
           speaker: s.speaker,
           text: s.text,
           emotion: s.emotion || "平静",
-          speed: "正常",
+          speed: 1,
           status: "pending",
           audio: "",
         }));
@@ -888,11 +929,25 @@ export default function Studio({
     addLog(stopped ? "已请求停止，正在收尾…" : "当前没有正在运行的 AI 任务");
   }
 
-  async function synthesizeLine(line: ProjectLine): Promise<string> {
+  function lineIsCloud(line: ProjectLine) {
     const cast = castList.find((c) => c.name === line.speaker);
+    return !!(cast?.cloudModel && cast.cloudVoice);
+  }
+
+  function generationLimit(lines: ProjectLine[]) {
+    const cloud = lines.filter(lineIsCloud).length;
+    if (!cloud) return 1;
+    if (cloud === lines.length) return 3;
+    return 2;
+  }
+
+  async function synthesizeLine(line: ProjectLine): Promise<string> {    const cast = castList.find((c) => c.name === line.speaker);
     if (cast?.cloudModel && cast.cloudVoice) {
       const emotion = line.emotion && line.emotion !== "平静" ? `用${line.emotion}的语气` : "用自然平静的语气";
-      const speed = line.speed && line.speed !== "正常" ? `，语速${line.speed}` : "";
+      const speed =
+        Math.abs(Number(line.speed) - 1) > 0.01
+          ? `，语速 ${Number(line.speed).toFixed(2)} 倍，1 是正常语速`
+          : "";
       const r = await cloudTTS({
         text: line.text,
         model: cast.cloudModel,
@@ -926,6 +981,7 @@ export default function Studio({
       text: line.text,
       voice,
       lang: "ZH",
+      speed: line.speed,
       emo_vector: EMOTION_VECTORS[line.emotion] || EMOTION_VECTORS["平静"],
       emo_alpha: 0.85,
     });
@@ -950,7 +1006,7 @@ export default function Studio({
     log("tts", "系统语音试听", { chars: text.length, voice: voice?.name || "默认" });
   }
 
-  function loadAndPlay(src: string) {
+  function loadAndPlay(src: string, onEnded?: () => void) {
     if (!src) return;
     if (audioSrc === src && audioRef.current) {
       if (audioRef.current.paused) {
@@ -967,16 +1023,32 @@ export default function Studio({
     const audio = new Audio(src);
     audioRef.current = audio;
     audio.playbackRate = audioRate;
-    audio.onloadedmetadata = () =>
-      setAudioDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-    audio.ontimeupdate = () => setAudioTime(audio.currentTime);
+    audio.preload = "auto";
+    const syncDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) setAudioDuration(audio.duration);
+    };
+    audio.onloadedmetadata = syncDuration;
+    audio.ondurationchange = syncDuration;
+    audio.onloadeddata = syncDuration;
+    audio.ontimeupdate = () => {
+      setAudioTime(audio.currentTime);
+      if (audioDuration <= 0) syncDuration();
+    };
     audio.onplay = () => setAudioPlaying(true);
     audio.onpause = () => setAudioPlaying(false);
-    audio.onended = () => setAudioPlaying(false);
+    audio.onerror = () => {
+      setAudioPlaying(false);
+      setGenMsg("音频加载失败，文件可能已被删除");
+    };
+    audio.onended = () => {
+      setAudioPlaying(false);
+      onEnded?.();
+    };
     setAudioSrc(src);
     setAudioTime(0);
     setAudioDuration(0);
     setAudioPlaying(true);
+    audio.load();
     audio.play().catch(() => setAudioPlaying(false));
   }
 
@@ -995,6 +1067,23 @@ export default function Studio({
   }
 
   function playCurrent() {
+    if (auditionMode === "continuous") {
+      const start = script.findIndex((l) => l.id === selected?.id);
+      const queue = script
+        .slice(Math.max(0, start))
+        .filter((l) => l.audio)
+        .map((l) => audioUrl(l.audio!));
+      if (!queue.length) {
+        setGenMsg("从当前句往后还没有生成音频");
+        return;
+      }
+      const playAt = (i: number) => {
+        if (i >= queue.length) return;
+        loadAndPlay(queue[i], () => playAt(i + 1));
+      };
+      playAt(0);
+      return;
+    }
     if (selected?.audio) loadAndPlay(audioUrl(selected.audio));
     else setGenMsg("这一句还没有生成音频");
   }
@@ -1007,14 +1096,15 @@ export default function Studio({
   function seekAudio(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    if (audioRef.current && audioDuration) audioRef.current.currentTime = pct * audioDuration;
-  }
-
-  function cycleRate() {
-    const rates = [1, 1.2, 1.5, 0.8];
-    const next = rates[(rates.indexOf(audioRate) + 1) % rates.length];
-    setAudioRate(next);
-    if (audioRef.current) audioRef.current.playbackRate = next;
+    const duration = audioRef.current?.duration;
+    if (
+      audioRef.current &&
+      typeof duration === "number" &&
+      Number.isFinite(duration) &&
+      duration > 0
+    ) {
+      audioRef.current.currentTime = pct * duration;
+    }
   }
 
   async function generateSingle(line: ProjectLine) {
@@ -1055,9 +1145,18 @@ export default function Studio({
 
   async function generateChapter(target: ProjectChapter) {
     if (genState === "generating" || !project) return;
-    const targets = target.lines.filter((l) => l.status !== "done" || !l.audio);
+    const targets = target.lines.filter(
+      (l) => l.text.trim() && (l.status !== "done" || !l.audio)
+    );
     if (!targets.length) {
       setGenMsg(`「${target.title}」没有待生成的句子`);
+      return;
+    }
+    if (
+      !window.confirm(
+        `生成本章「${target.title}」？\n\n会生成 ${targets.length} 句待生成或改动过的台词，已有音频且没改动的句子不会重跑。`
+      )
+    ) {
       return;
     }
 
@@ -1067,11 +1166,12 @@ export default function Studio({
     setGenState("generating");
     const next = [...target.lines];
     let ok = 0;
+    let finished = 0;
+    const limit = generationLimit(targets);
 
-    for (let i = 0; i < targets.length; i++) {
-      if (genStopRef.current) break;
-      const line = targets[i];
-      setGenMsg(`「${target.title}」 ${i + 1}/${targets.length} · ${line.speaker}`);
+    await runPool(targets, limit, async (line) => {
+      if (genStopRef.current) return;
+      setGenMsg(`「${target.title}」 ${finished + 1}/${targets.length} · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
         const idx = next.findIndex((l) => l.id === line.id);
@@ -1084,8 +1184,10 @@ export default function Studio({
           error: (e as Error).message,
         });
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
+      } finally {
+        finished++;
       }
-    }
+    });
 
     onSave({
       ...project,
@@ -1101,18 +1203,19 @@ export default function Studio({
 
   async function generateChecked() {
     if (genState === "generating" || !checked.size) return;
-    const targets = script.filter((l) => checked.has(l.id));
+    const targets = script.filter((l) => checked.has(l.id) && l.text.trim());
     if (!targets.length) return;
 
     genStopRef.current = false;
     setGenState("generating");
     const next = [...script];
     let ok = 0;
+    let finished = 0;
+    const limit = generationLimit(targets);
 
-    for (let i = 0; i < targets.length; i++) {
-      if (genStopRef.current) break;
-      const line = targets[i];
-      setGenMsg(`生成勾选 ${i + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
+    await runPool(targets, limit, async (line) => {
+      if (genStopRef.current) return;
+      setGenMsg(`生成勾选 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
         const idx = next.findIndex((l) => l.id === line.id);
@@ -1126,8 +1229,10 @@ export default function Studio({
           error: (e as Error).message,
         });
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
+      } finally {
+        finished++;
       }
-    }
+    });
 
     saveLines(next);
     setChecked(new Set());
@@ -1136,21 +1241,14 @@ export default function Studio({
     log("generate", "生成勾选", { ok, total: targets.length });
   }
 
-  async function generateBatch() {
+  async function generateBatch(mode: "pending" | "all" = "pending") {
     if (genState === "generating") return;
 
-    let currentScript = script;
-    if (script.some((l) => l.status === "done" && l.audio)) {
-      const resume = window.confirm(
-        "确定：只生成未完成和改动过的句子\n取消：全部重新生成"
-      );
-      if (!resume) {
-        currentScript = script.map((l) => ({ ...l, status: "dirty" as const }));
-        saveLines(currentScript);
-      }
-    }
-
-    const targets = currentScript.filter((l) => l.status !== "done" || !l.audio);
+    const currentScript = script;
+    const targets =
+      mode === "all"
+        ? currentScript.filter((l) => l.text.trim())
+        : currentScript.filter((l) => l.text.trim() && (l.status !== "done" || !l.audio));
     if (!targets.length) {
       setGenMsg("没有待生成的句子");
       return;
@@ -1162,15 +1260,12 @@ export default function Studio({
     const failedLines: ProjectLine[] = [];
     let ok = 0;
     let fail = 0;
-    let stopped = false;
+    let finished = 0;
+    const limit = generationLimit(targets);
 
-    for (let i = 0; i < targets.length; i++) {
-      if (genStopRef.current) {
-        stopped = true;
-        break;
-      }
-      const line = targets[i];
-      setGenMsg(`正在生成 ${i + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
+    await runPool(targets, limit, async (line) => {
+      if (genStopRef.current) return;
+      setGenMsg(`正在生成 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
         const idx = next.findIndex((l) => l.id === line.id);
@@ -1181,15 +1276,14 @@ export default function Studio({
         fail++;
         failedLines.push(line);
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
+      } finally {
+        finished++;
       }
-    }
+    });
 
-    if (!stopped) {
-      for (const line of failedLines) {
-        if (genStopRef.current) {
-          stopped = true;
-          break;
-        }
+    if (!genStopRef.current && failedLines.length) {
+      await runPool(failedLines, generationLimit(failedLines), async (line) => {
+        if (genStopRef.current) return;
         setGenMsg(`重试第 ${line.id} 句 · ${line.speaker}`);
         try {
           const url = await synthesizeLine(line);
@@ -1201,15 +1295,16 @@ export default function Studio({
         } catch {
           /* 仍然失败，保留 */
         }
-      }
+      });
     }
 
     saveLines(next);
+    const stopped = genStopRef.current;
 
     if (stopped) {
       setGenState("idle");
-      setGenMsg(`已停止：完成 ${ok} 句，剩余 ${targets.length - ok - fail} 句`);
-      log("generate", "停止批量生成", { ok, fail, total: targets.length });
+      setGenMsg(`已取消：完成 ${ok} 句，剩余 ${targets.length - ok - fail} 句`);
+      log("generate", "取消批量生成", { ok, fail, total: targets.length });
       return;
     }
 
@@ -1220,8 +1315,8 @@ export default function Studio({
 
   function stopGenerate() {
     genStopRef.current = true;
-    setGenMsg("正在停止，当前句完成后停下…");
-    log("generate", "请求停止批量生成", {});
+    setGenMsg("正在取消，已发出的请求会在返回后停下…");
+    log("generate", "请求取消批量生成", {});
   }
 
   return (
@@ -1247,13 +1342,34 @@ export default function Studio({
               </button>
             </>
           )}
-          <button className="btn small" onClick={runSplit}>拆分台词</button>
-          <button className="btn small" onClick={playCurrent}>试听当前句</button>
+          <div className="seg" style={{ flex: "0 0 108px" }}>
+            <button
+              className={auditionMode === "single" ? "on" : ""}
+              onClick={() => setAuditionMode("single")}
+            >
+              单句
+            </button>
+            <button
+              className={auditionMode === "continuous" ? "on" : ""}
+              onClick={() => setAuditionMode("continuous")}
+            >
+              连续
+            </button>
+          </div>
+          <button className="btn small" onClick={playCurrent}>
+            {auditionMode === "continuous" ? "连续试听" : "试听当前句"}
+          </button>
           <button
             className="btn small primary"
-            onClick={genState === "generating" ? stopGenerate : generateBatch}
+            onClick={
+              genState === "generating"
+                ? stopGenerate
+                : script.some((l) => l.audio)
+                  ? () => setGenDialog(true)
+                  : () => void generateBatch("pending")
+            }
           >
-            {genState === "generating" ? "停止生成" : "生成待生成"}
+            {genState === "generating" ? "取消生成" : "生成"}
           </button>
         </div>
       </div>
@@ -1313,6 +1429,7 @@ export default function Studio({
               {script.map((line) => (
                 <div
                   key={line.id}
+                  id={`line-${line.id}`}
                   className={`line ${current === line.id ? "current" : ""}`}
                   onClick={() => {
                     setCurrent(line.id);
@@ -1409,7 +1526,7 @@ export default function Studio({
                         </span>
                       )}
                       <span className="tag emotion">{line.emotion}</span>
-                      <span className="tag speed">{line.speed}</span>
+                      <span className="tag speed">{Number(line.speed).toFixed(2)}×</span>
                       <span
                         className={`line-status ${
                           lineStatus[line.id] === "error" ? "error" : line.status
@@ -1526,9 +1643,20 @@ export default function Studio({
                 <span className="vu"><i /><i /><i /><i /><i /></span>
                 {script.filter((l) => l.status === "done" && l.audio).length} / {script.length}
               </span>
-              <button className="speed" onClick={cycleRate} title="切换倍速">
-                {audioRate.toFixed(1)}×
-              </button>
+              <select
+                className="select speed-select"
+                value={audioRate}
+                onChange={(e) => {
+                  const rate = Number(e.target.value);
+                  setAudioRate(rate);
+                  if (audioRef.current) audioRef.current.playbackRate = rate;
+                }}
+                title="播放倍速"
+              >
+                {[0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3].map((rate) => (
+                  <option key={rate} value={rate}>{rate.toFixed(2)}×</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -1551,30 +1679,39 @@ export default function Studio({
                 </div>
 
                 <p className="tool-help">
-                  规则认不准的说话人会标成「未知」。AI 标注只改说话人、情绪、语速，不重拆台词。整本操作在项目库右键「编辑整本」。
+                  所有 AI 拆分和标注都在这里。整本操作在项目库右键「编辑整本」。
                 </p>
 
-                <button
-                  className="btn small primary"
-                  style={{ width: "100%", marginTop: 8 }}
-                  onClick={aiRebuildChapter}
-                  disabled={annotating}
-                >
-                  AI 重拆本章（角色 + 情绪 + 语速）
-                </button>
+                <details className="tool-menu" open>
+                  <summary>AI 拆分与标注</summary>
 
-                <div style={{ display: "flex", gap: 7, marginTop: 7 }}>
-                  <button className="btn small" style={{ flex: 1 }} onClick={annotateWithAi} disabled={annotating}>
-                    AI 标注角色
-                  </button>
-                  {annotating ? (
-                    <button className="btn small" onClick={stopAi}>停止</button>
-                  ) : (
-                    <button className="btn small" onClick={runSplit} disabled={task === "running"}>
-                      仅规则重拆
+                  <div className="tool-option">
+                    <button className="btn small primary" onClick={aiRebuildChapter} disabled={annotating}>
+                      AI 重拆本章（台词 + 角色 + 情绪 + 语速）
+                    </button>
+                    <p>先规则拆句，再让 AI 识别角色、情绪和语速；会覆盖本章现有台词和音频标记。</p>
+                  </div>
+
+                  <div className="tool-option">
+                    <button className="btn small" onClick={annotateWithAi} disabled={annotating}>
+                      AI 标注角色（不重拆台词）
+                    </button>
+                    <p>只改说话人、情绪、语速，不改变句子和已有音频。</p>
+                  </div>
+
+                  <div className="tool-option">
+                    <button className="btn small" onClick={runSplit} disabled={task === "running" || annotating}>
+                      规则重拆本章（只拆台词）
+                    </button>
+                    <p>只按引号和分段拆句，不调用 AI；认不准的说话人会标成「未知」。</p>
+                  </div>
+
+                  {annotating && (
+                    <button className="btn small" onClick={stopAi} style={{ width: "100%" }}>
+                      停止 AI
                     </button>
                   )}
-                </div>
+                </details>
 
                 {aiMsg || aiProgress.total > 0 ? (
                   <div className="tool-progress">
@@ -1619,7 +1756,9 @@ export default function Studio({
                 )}
 
                 {chapterCasts.map((c) => {
-                  const count = script.filter((l) => l.speaker === c.name).length;
+                  const roleLines = script.filter((l) => l.speaker === c.name);
+                  const count = roleLines.length;
+                  const rolePos = roleLines.findIndex((l) => l.id === current);
                   return (
                     <div
                       key={c.name}
@@ -1630,7 +1769,32 @@ export default function Studio({
                         <span className="cast-name">{c.name}</span>
                         <span className="cast-desc">{castVoiceLabel(c)}</span>
                       </div>
-                      <span className="cast-count">{count} 句</span>
+                      <div className="cast-jump" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          title="上一句"
+                          onClick={() => jumpRole(c.name, -1)}
+                          disabled={count < 2}
+                        >
+                          ▲
+                        </button>
+                        <input
+                          className="cast-jump-input"
+                          type="number"
+                          min={1}
+                          max={count}
+                          value={rolePos >= 0 ? rolePos + 1 : 1}
+                          onChange={(e) => jumpRoleTo(c.name, Number(e.target.value) - 1)}
+                          title="输入第几句并跳转"
+                        />
+                        <span>/{count}</span>
+                        <button
+                          title="下一句"
+                          onClick={() => jumpRole(c.name, 1)}
+                          disabled={count < 2}
+                        >
+                          ▼
+                        </button>
+                      </div>
                       <div className="cast-actions">
                         <button
                           title="把当前句换成这个角色"
@@ -1726,26 +1890,39 @@ export default function Studio({
 
                 <div className="field">
                   <div className="field-label"><span>语速</span><span style={{ color: "var(--copper-bright)" }}>
-                    {selectedCast?.cloudVoice ? selected?.speed ?? speed : "仅云端"}
+                    {Number(selected?.speed ?? speed).toFixed(2)}×
                   </span></div>
-                  <div className="seg">
-                    {["很慢", "慢", "正常", "稍慢", "快"].map((s) => (
-                      <button
-                        key={s}
-                        className={(selected?.speed ?? speed) === s ? "on" : ""}
-                        disabled={!selectedCast?.cloudVoice}
-                        onClick={() => {
-                          setSpeed(s);
-                          if (selected) updateLine(selected.id, { speed: s });
-                        }}
-                      >
-                        {s}
-                      </button>
-                    ))}
+                  <div className="speed-row">
+                    <input
+                      className="slider"
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.05}
+                      value={Number(selected?.speed ?? speed)}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setSpeed(value);
+                        if (selected) updateLine(selected.id, { speed: value });
+                      }}
+                    />
+                    <input
+                      className="input speed-number"
+                      type="number"
+                      min={0.5}
+                      max={2}
+                      step={0.05}
+                      value={Number(selected?.speed ?? speed)}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isFinite(value)) return;
+                        const next = Math.min(2, Math.max(0.5, value));
+                        setSpeed(next);
+                        if (selected) updateLine(selected.id, { speed: next });
+                      }}
+                    />
                   </div>
-                  {!selectedCast?.cloudVoice && (
-                    <div className="tool-help">本地 IndexTTS 暂不支持单独调节语速；情绪会通过情感向量生效。</div>
-                  )}
+                  <div className="tool-help">0.5 最慢，1 正常，2 最快；云 TTS 和本地 IndexTTS 都支持。</div>
                 </div>
 
                 <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
@@ -1783,6 +1960,53 @@ export default function Studio({
           <button onClick={() => { setSpeakerFor(lineMenu.line.id); setLineMenu(null); }}>换角色</button>
           <button onClick={() => { insertLine(lineMenu.line.id); setLineMenu(null); }}>在下方插入</button>
           <button className="danger" onClick={() => { deleteLine(lineMenu.line.id); setLineMenu(null); }}>删除这句</button>
+        </div>
+      )}
+
+      {genDialog && (
+        <div
+          className="modal-mask"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setGenDialog(false);
+          }}
+        >
+          <div className="modal gen-dialog">
+            <div className="modal-head">
+              <div>
+                <div className="modal-title">生成音频</div>
+                <div className="modal-desc">
+                  本章共 {allCount} 句，{pendingCount} 句待生成或改动过。
+                </div>
+              </div>
+              <button className="modal-close" onClick={() => setGenDialog(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <button
+                className="edit-option"
+                disabled={!pendingCount}
+                onClick={() => {
+                  setGenDialog(false);
+                  void generateBatch("pending");
+                }}
+              >
+                <b>生成未生成和改动过的（{pendingCount} 句）</b>
+                <span>已有音频且没改动的句子不会重跑，最省时间。</span>
+              </button>
+              <button
+                className="edit-option"
+                onClick={() => {
+                  setGenDialog(false);
+                  void generateBatch("all");
+                }}
+              >
+                <b>全部重新生成（{allCount} 句）</b>
+                <span>所有台词重新生成；上一版音频会保留在历史里，可切换回退。</span>
+              </button>
+            </div>
+            <div className="modal-foot">
+              <button className="btn" onClick={() => setGenDialog(false)}>取消</button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -171,6 +171,9 @@ def synthesize(req: TTSRequest):
     if req.emo_text:
         kwargs["use_emo_text"] = True
         kwargs["emo_text"] = req.emo_text
+    speed = max(0.5, min(2.0, float(req.speed or 1.0)))
+    if abs(speed - 1.0) > 0.01:
+        kwargs["duration_factor"] = 1.0 / speed
 
     try:
         tts.infer(**kwargs)
@@ -434,8 +437,39 @@ def export(req: ExportRequest):
         "ok": True,
         "base": base,
         "files": files,
+        "file": str(wav_path),
         "duration": round(len(master) / target_sr, 2),
         "lines": len(clips),
+    }
+
+
+class ZipRequest(BaseModel):
+    files: list[str]
+    output_name: Optional[str] = None
+
+
+@app.post("/v1/zip")
+def zip_audio(req: ZipRequest):
+    if not req.files:
+        raise HTTPException(400, "files 不能为空")
+    base = (req.output_name or f"bundle-{uuid.uuid4().hex[:8]}").replace("/", "_").replace("\\", "_")
+    zip_path = OUT_DIR / f"{base}.zip"
+    import zipfile
+
+    count = 0
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in req.files:
+            p = OUT_DIR / Path(str(name)).name
+            if p.is_file():
+                zf.write(p, p.name)
+                count += 1
+    if not count:
+        raise HTTPException(400, "没有可打包的音频")
+    return {
+        "ok": True,
+        "file": str(zip_path),
+        "url": f"/v1/audio/{zip_path.name}",
+        "count": count,
     }
 
 

@@ -33,7 +33,7 @@ export interface AnnotateChange {
   id: number;
   speaker: string;
   emotion: string;
-  speed: string;
+  speed: number;
 }
 
 export interface AnnotateResult {

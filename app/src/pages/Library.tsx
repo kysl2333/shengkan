@@ -194,7 +194,7 @@ export default function Library({
   }
 
   function openImport() {
-    resetImport();
+    if (!text.trim()) resetImport();
     setImportOpen(true);
   }
 
@@ -484,7 +484,7 @@ export default function Library({
       />
 
       {importOpen && (
-        <div className="modal-mask" onClick={(e) => { if (e.target === e.currentTarget && !busy) setImportOpen(false); }}>
+        <div className="modal-mask">
           <div className="modal import-modal">
             <div className="modal-head">
               <div>
@@ -613,7 +613,8 @@ export default function Library({
             </div>
 
             <div className="modal-foot">
-              <button className="btn" onClick={() => setImportOpen(false)} disabled={!!busy}>取消</button>
+              <button className="btn ghost" onClick={resetImport} disabled={!!busy}>清空</button>
+              <button className="btn" onClick={() => setImportOpen(false)} disabled={!!busy}>关闭</button>
               <button className="btn primary" onClick={doImport} disabled={!!busy || !chars}>
                 {busy ? "处理中…" : "导入"}
               </button>

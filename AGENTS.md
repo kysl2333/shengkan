@@ -177,12 +177,18 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 工作台本章角色卡片点击不能直接改当前句；要改说话人必须点显式的「设为当前句」，避免列表重排和误改。
 - 整本重拆章节只拆章节，不新增、不删除、不改名项目角色；整本角色标注才允许新增角色和改情绪/语速。
 - 支持 `.docx` 导入：`app/src/import/docx.ts` 按 `word/document.xml` 的段落提取正文，再走规则分章。
+- 导入弹窗只能点 ✕ / 关闭退出，不能点遮罩关闭；关闭后保留上次文本、AI 分章结果，避免重新识别。
+- 语速统一存 0.5-2.0 数字：1 正常，小于 1 更慢，大于 1 更快。本地 IndexTTS 传 `duration_factor = 1 / speed`，云 TTS 写进自然语言指令。
+- 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地 1 并发；取消时已发出的请求返回后停止。
+- 成片导出历史存 `localStorage`（`shengkan:exports:<projectId>`），因为 Master 切页会卸载；文件名用「书名-章节名」。
+- `voiceHistory` 记录角色用过的音色，绑定/解绑/删除音色时写入，最多 12 条，可单条移除。
+- 界面缩放 1.6，窗口 1600×1000；顶栏和 master head 必须允许换行。
 - 音色库分组：本地音色按 `category`，云音色按 `model`（小米预置 / 设计音色）。
 - EPUB 解析跳过 `img / figure / figcaption`，避免插图说明混进正文。
-- 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。
+- 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export` / `/v1/zip`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。
 - 工作台 `script` 必须在 `project.chapters` 变化时同步当前章节 `lines`，否则整本 AI 或别的页面修改后界面会显示旧台词。
 - 设置页只保留实际实现的标签页：AI 服务、语音引擎、开发与 MCP。不要加空标签。
-- 本地 IndexTTS 暂不支持单独语速控制；语速按钮只对云 TTS 生效，界面上要标明。
+- 语速滑块和数字输入对云 TTS、本地 IndexTTS 都生效；不要再写「本地不支持语速」。
 - 阿里 CosyVoice 还没接入，需要单独的 DashScope API Key；不要放假按钮。
 
 ## 不要做

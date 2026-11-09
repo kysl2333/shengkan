@@ -16,7 +16,7 @@ import {
 import { isRealCharacter } from "../import";
 import { log } from "../log";
 import { askText, askVoiceEdit } from "../prompt";
-import { castVoiceLabel, type Project } from "../projects";
+import { castVoiceLabel, pushCastVoiceHistory, type Project } from "../projects";
 
 function VoiceWave() {
   const bars = useMemo(
@@ -148,6 +148,7 @@ export default function Cast({
         c.id === castId
           ? {
               ...c,
+              voiceHistory: pushCastVoiceHistory(c),
               voicePath: "",
               voice: "",
               cloudModel: undefined,
@@ -170,6 +171,7 @@ export default function Cast({
           ? bound
             ? {
                 ...c,
+                voiceHistory: pushCastVoiceHistory(c),
                 voicePath: "",
                 voice: "",
                 cloudModel: undefined,
@@ -178,6 +180,7 @@ export default function Cast({
               }
             : {
                 ...c,
+                voiceHistory: pushCastVoiceHistory(c),
                 voicePath: voice.path,
                 voice: voice.displayName || voice.name,
                 cloudModel: undefined,
@@ -203,6 +206,7 @@ export default function Cast({
           ? bound
             ? {
                 ...c,
+                voiceHistory: pushCastVoiceHistory(c),
                 voicePath: "",
                 voice: "",
                 cloudModel: undefined,
@@ -211,6 +215,7 @@ export default function Cast({
               }
             : {
                 ...c,
+                voiceHistory: pushCastVoiceHistory(c),
                 voicePath: "",
                 voice: voice.name,
                 cloudModel: voice.model,
@@ -244,6 +249,19 @@ export default function Cast({
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  function removeHistory(castId: string, usedAt: string) {
+    if (!project) return;
+    onSave({
+      ...project,
+      casts: project.casts.map((c) =>
+        c.id === castId
+          ? { ...c, voiceHistory: (c.voiceHistory ?? []).filter((h) => h.usedAt !== usedAt) }
+          : c
+      ),
+    });
+    log("cast", "移除音色历史", { castId, usedAt });
   }
 
   async function editLocal(voice: VoiceItem) {
@@ -424,6 +442,7 @@ export default function Cast({
               c.cloudVoice === voice.voice && c.cloudModel === voice.model
                 ? {
                     ...c,
+                    voiceHistory: pushCastVoiceHistory(c),
                     cloudModel: undefined,
                     cloudVoice: undefined,
                     cloudName: undefined,
@@ -453,7 +472,12 @@ export default function Cast({
             ...project,
             casts: project.casts.map((c) =>
               c.voicePath === voice.path
-                ? { ...c, voicePath: "", voice: c.cloudVoice ? c.voice : "" }
+                ? {
+                    ...c,
+                    voiceHistory: pushCastVoiceHistory(c),
+                    voicePath: "",
+                    voice: c.cloudVoice ? c.voice : "",
+                  }
                 : c
             ),
           });
@@ -622,6 +646,33 @@ export default function Cast({
           <div className="cast-warning">
             <span>检测到 {invalidCasts.length} 个疑似无效角色（如「她回」「江宁一愣」）</span>
             <button className="btn small" onClick={cleanCasts}>清理</button>
+          </div>
+        )}
+
+        {selected && (
+          <div className="voice-history">
+            <div className="section-label" style={{ marginBottom: 6 }}>用过的音色</div>
+            {selected.voiceHistory?.length ? (
+              selected.voiceHistory.map((h) => (
+                <div className="voice-history-row" key={`${h.usedAt}-${h.name}`}>
+                  <div>
+                    <b>{h.name}</b>
+                    <span>
+                      {h.cloudVoice ? "云音色" : "本地音色"} ·{" "}
+                      {new Date(h.usedAt).toLocaleString("zh-CN", { hour12: false })}
+                    </span>
+                  </div>
+                  <button
+                    className="btn ghost small"
+                    onClick={() => removeHistory(selected.id, h.usedAt)}
+                  >
+                    移除记录
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="tool-help">还没有换过音色。绑定新音色后，旧音色会记录在这里。</p>
+            )}
           </div>
         )}
 

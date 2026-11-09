@@ -355,8 +355,20 @@
   cursor: pointer;
 }
 .edit-option:hover { border-color: var(--copper); background: #221d16; }
+.edit-option:disabled { opacity: .45; cursor: not-allowed; }
 .edit-option b { font-size: 14px; color: var(--text); }
 .edit-option span { font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+.gen-dialog { width: 520px; }
+.export-player { display: flex; align-items: center; gap: 10px; margin: 8px 0 10px; }
+.export-player .play-btn { width: 34px; height: 34px; flex: none; }
+.export-player .time { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); white-space: nowrap; }
+.export-range { flex: 1; accent-color: var(--copper); min-width: 80px; }
+.export-title { font-size: 13px; color: var(--text); margin: 4px 0 6px; }
+.export-history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.export-history-row:last-child { border-bottom: none; }
+.export-history-row b { display: block; font-size: 12.5px; color: var(--text); font-weight: 500; }
+.export-history-row span { display: block; margin-top: 3px; font-family: var(--mono); font-size: 9px; color: var(--text-faint); }
+.export-history-actions { display: flex; gap: 6px; flex: none; }
 
 .cast-warning {
   display: flex;
@@ -372,10 +384,25 @@
   line-height: 1.5;
   color: var(--copper-bright);
 }
+.voice-history { margin: 10px 16px 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.voice-history-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.voice-history-row:last-child { border-bottom: none; }
+.voice-history-row b { display: block; font-size: 11.5px; color: var(--text); font-weight: 500; }
+.voice-history-row span { display: block; margin-top: 2px; font-family: var(--mono); font-size: 8.5px; color: var(--text-faint); }
 
 .voice-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
 .voice-foot { flex-wrap: wrap; row-gap: 6px; }
 .voice-use { white-space: nowrap; }
+.speed-row { display: flex; align-items: center; gap: 8px; }
+.speed-row .slider { flex: 1; }
+.speed-number { width: 68px; height: 32px; flex: none; padding: 0 8px; font-family: var(--mono); }
+.speed-select { width: 78px; height: 26px; padding: 0 6px; font-family: var(--mono); font-size: 10px; flex: none; }
+.tool-menu { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--panel-2); }
+.tool-menu summary { cursor: pointer; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.tool-option { margin-bottom: 10px; }
+.tool-option:last-of-type { margin-bottom: 4px; }
+.tool-option .btn { width: 100%; }
+.tool-option p { margin-top: 5px; font-size: 11.5px; line-height: 1.6; color: var(--text-faint); }
 .context-menu-title { font-size: 10px; color: var(--text-faint); padding: 4px 10px 6px; }
 
 .context-menu button.new {
@@ -406,6 +433,16 @@
 .cast-mini-actions button:hover { color: var(--copper-bright); background: rgba(255, 255, 255, .06); }
 
 .cast-count { margin-left: auto; font-size: 10px; color: var(--text-faint); flex: none; }
+.cast-jump { display: flex; align-items: center; gap: 2px; margin-left: auto; font-family: var(--mono); font-size: 9px; color: var(--text-faint); flex: none; }
+.cast-jump button { width: 16px; height: 16px; border-radius: 3px; font-size: 8px; color: var(--text-faint); }
+.cast-jump button:hover { color: var(--copper-bright); background: rgba(255,255,255,.06); }
+.cast-jump button:disabled { opacity: .3; cursor: default; }
+.cast-jump-input { width: 30px; height: 16px; padding: 0 2px; text-align: center; font-family: var(--mono); font-size: 9px; color: var(--text-dim); background: transparent; border: 1px solid var(--line); border-radius: 3px; }
+.cast-jump-input::-webkit-inner-spin-button { display: none; }
+
+.studio-head { height: auto; min-height: 48px; flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+.studio-head .right { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+.master-head { flex-wrap: wrap; gap: 10px; }
 .cast-actions { display: none; gap: 2px; flex: none; }
 .cast-card:hover .cast-actions { display: flex; }
 .cast-actions button {
