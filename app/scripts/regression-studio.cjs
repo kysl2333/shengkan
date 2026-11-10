@@ -1,0 +1,291 @@
+/* 声栞 · 工作台回归检查
+ *
+ * 跑法：cd app && npm run check:studio
+ *
+ * 覆盖：
+ * 1. 切换章节时勾选/编辑态不串到下一章
+ * 2. 生成中切章节，不把「生成中」显示到新章节
+ * 3. 只剩一句时拒绝删除，且不先删音频
+ * 4. 生成期间改其他台词，生成结束不覆盖改动
+ * 5. AI 重拆本章时清理被替换台词的旧音频
+ */
+
+const { app, BrowserWindow, ipcMain } = require("electron");
+const path = require("node:path");
+const fs = require("node:fs");
+
+const APP_DIR = path.join(__dirname, "..");
+const DIST = path.join(APP_DIR, "dist", "index.html");
+const results = [];
+const savedProjects = [];
+
+const project = {
+  id: "p-regression",
+  title: "状态回归",
+  createdAt: "2026-11-01T10:00:00.000Z",
+  updatedAt: "2026-11-11T00:00:00.000Z",
+  settings: { engine: "http://127.0.0.1:8290" },
+  casts: [
+    { id: "cast-1", name: "旁白", initial: "旁", desc: "待匹配音色", voice: "", voicePath: "", color: "#2f6b57" },
+    { id: "cast-2", name: "沈砚", initial: "沈", desc: "待匹配音色", voice: "", voicePath: "", color: "#a9763c" },
+  ],
+  chapters: [
+    {
+      id: "ch-01",
+      title: "第一章",
+      source: "第一句\n第二句",
+      lines: [
+        { id: 1, speaker: "旁白", text: "第一句", emotion: "平静", speed: 1, status: "pending", audio: "" },
+        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "pending", audio: "" },
+      ],
+    },
+    {
+      id: "ch-02",
+      title: "第二章",
+      source: "只有一句",
+      lines: [
+        { id: 1, speaker: "沈砚", text: "只有一句", emotion: "平静", speed: 1, status: "done", audio: "keep-me.wav" },
+      ],
+    },
+  ],
+};
+
+const summary = {
+  id: project.id,
+  title: project.title,
+  chapters: 2,
+  lines: 3,
+  done: 1,
+  percent: 33,
+  updatedAt: project.updatedAt,
+};
+
+ipcMain.handle("projects:list", () => [summary]);
+ipcMain.handle("projects:load", () => project);
+ipcMain.handle("projects:save", (_e, p) => {
+  savedProjects.push(p);
+  return { ...summary, updatedAt: p.updatedAt || new Date().toISOString() };
+});
+ipcMain.handle("projects:create", () => project);
+ipcMain.handle("projects:trash", () => ({ ok: true, trashName: "x" }));
+ipcMain.handle("projects:trash-list", () => []);
+ipcMain.handle("projects:restore", () => summary);
+ipcMain.handle("projects:delete-forever", () => ({ ok: true }));
+ipcMain.handle("projects:root", () => APP_DIR);
+ipcMain.handle("config:get", () => ({ mode: "gradio", gradioUrl: "", gradioApi: "", voiceLib: "", python: "", indexttsCodeDir: "", indexttsModelDir: "" }));
+ipcMain.handle("config:set", (_e, cfg) => cfg);
+ipcMain.handle("ai:config:get", () => ({ baseUrl: "", model: "", apiKey: "", autoChapter: false, prompts: {} }));
+ipcMain.handle("ai:config:set", (_e, cfg) => cfg);
+ipcMain.handle("ai:test", () => ({ ok: true, ms: 1, model: "mock" }));
+ipcMain.handle("ai:default-prompts", () => ({ chapter: "", annotate: "" }));
+ipcMain.handle("ai:cancel-detect", () => true);
+ipcMain.handle("ai:extract-casts", () => ({ casts: [], usage: { input: 0, output: 0, total: 0, cached: 0 } }));
+ipcMain.handle("ai:annotate-lines", () => ({ changes: [], cancelled: false, nextBatch: 0, usage: { input: 0, output: 0, total: 0, cached: 0 } }));
+ipcMain.handle("cloud:list", () => []);
+ipcMain.handle("cloud:providers", () => []);
+ipcMain.handle("log:info", () => ({ file: "app.log", size: 1 }));
+ipcMain.handle("log:open", () => "app.log");
+ipcMain.on("log:write", () => {});
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function check(name, pass, detail = "") {
+  results.push({ name, pass });
+  console.log(`[${pass ? "PASS" : "FAIL"}] ${name}${detail ? " — " + detail : ""}`);
+}
+
+function evalJs(win, code) {
+  return win.webContents.executeJavaScript(code);
+}
+
+async function installStubs(win) {
+  await evalJs(
+    win,
+    `(() => {
+      window.__fetchLog = { audioDeletes: [], tts: 0 };
+      window.confirm = () => true;
+      if (window.__originalFetch) return true;
+      window.__originalFetch = window.fetch.bind(window);
+      window.fetch = async (url, init) => {
+        const u = String(url);
+        const jsonResponse = (data) =>
+          new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        if (u.includes("/v1/audio-delete")) {
+          try { window.__fetchLog.audioDeletes.push(JSON.parse(init && init.body ? init.body : "{}").name); } catch { window.__fetchLog.audioDeletes.push("unparsed"); }
+          return jsonResponse({ ok: true });
+        }
+        if (u.includes("/v1/voices")) {
+          return jsonResponse({ voices: [{ name: "voice-01.wav", displayName: "沉静旁白", desc: "女声", gender: "女", age: "青年", path: "voice-01.wav", category: "旁白", size: 1000 }], count: 1 });
+        }
+        if (u.includes("/v1/tts")) {
+          window.__fetchLog.tts += 1;
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          return jsonResponse({ ok: true, file: "mock.wav", url: "/v1/audio/mock.wav" });
+        }
+        if (u.includes("/v1/split")) {
+          return jsonResponse({ segments: [{ speaker: "旁白", text: "第一句", emotion: "平静", confidence: 1 }], count: 1, characters: 3, mode: "rule" });
+        }
+        if (u.includes("/health")) {
+          return jsonResponse({ ok: true, engine: "stub", code_dir: "", model_dir: "", model_loaded: true });
+        }
+        return window.__originalFetch(url, init);
+      };
+      return true;
+    })()`
+  );
+}
+
+async function reload(win) {
+  await win.webContents.reload();
+  await wait(900);
+  await installStubs(win);
+}
+
+async function clickChapter(win, title) {
+  return evalJs(
+    win,
+    `(() => { const el = [...document.querySelectorAll('.chapter')].find(x => x.textContent.includes(${JSON.stringify(title)})); if (!el) return false; el.click(); return true; })()`
+  );
+}
+
+app.whenReady().then(async () => {
+  if (!fs.existsSync(DIST)) {
+    console.error("找不到 dist/index.html，先运行 npm run build");
+    app.exit(1);
+    return;
+  }
+
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    show: false,
+    webPreferences: {
+      preload: path.join(APP_DIR, "electron", "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      offscreen: true,
+      backgroundThrottling: false,
+    },
+  });
+
+  await win.loadFile(DIST);
+  await wait(1200);
+  await installStubs(win);
+
+  // 1. 勾选状态不跨章节
+  await clickChapter(win, "第一章");
+  await evalJs(win, `document.querySelector('.line input[type="checkbox"]').click()`);
+  await wait(200);
+  await clickChapter(win, "第二章");
+  await wait(250);
+  check("跨章节不保留勾选", (await evalJs(win, `document.querySelector('.line input[type="checkbox"]').checked`)) === false);
+
+  // 2. 编辑状态不跨章节
+  await reload(win);
+  await evalJs(win, `document.querySelector('.line .line-text').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+  await wait(250);
+  const editingBefore = await evalJs(win, `!!document.querySelector('.line .line-edit')`);
+  await clickChapter(win, "第二章");
+  await wait(250);
+  const editingAfter = await evalJs(win, `!!document.querySelector('.line .line-edit')`);
+  check("跨章节不保留编辑态", editingBefore === true && editingAfter === false);
+
+  // 3. 生成状态不跨章节
+  await reload(win);
+  const generateClicked = await evalJs(
+    win,
+    `(() => { const b = document.querySelector('.line.current .line-actions button[aria-label="生成这句"]'); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(300);
+  const ttsStarted = await evalJs(win, `window.__fetchLog.tts`);
+  await clickChapter(win, "第二章");
+  await wait(250);
+  const generatingAfterSwitch = await evalJs(win, `!!document.querySelector('.line .spinner') && document.body.textContent.includes('生成中')`);
+  check("生成请求确实发出", generateClicked === true && ttsStarted > 0);
+  check("跨章节不显示上一章的生成中", generatingAfterSwitch === false);
+  await wait(1600);
+
+  // 4. 只剩一句时拒绝删除且不删音频
+  await reload(win);
+  await clickChapter(win, "第二章");
+  await wait(250);
+  const beforeLines = await evalJs(win, `document.querySelectorAll('.line').length`);
+  const deleteClicked = await evalJs(
+    win,
+    `(() => { const b = document.querySelector('.line.current .line-actions button[aria-label="删除这句"]'); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(400);
+  const afterLines = await evalJs(win, `document.querySelectorAll('.line').length`);
+  const audioDeletes = await evalJs(win, `window.__fetchLog.audioDeletes`);
+  check("只剩一句时保留台词", deleteClicked === true && beforeLines === 1 && afterLines === 1);
+  check("只剩一句时不删除音频", audioDeletes.length === 0, JSON.stringify(audioDeletes));
+
+  // 5. 生成期间改其他台词，不能被生成结果覆盖
+  await reload(win);
+  await evalJs(
+    win,
+    `(() => { const b = document.querySelector('.line.current .line-actions button[aria-label="生成这句"]'); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(250);
+  await evalJs(win, `document.querySelectorAll('.line')[1].querySelector('.line-text').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+  await wait(150);
+  const editHandled = await evalJs(
+    win,
+    `(() => {
+      const second = document.querySelectorAll('.line')[1];
+      const ta = second && second.querySelector('.line-edit');
+      if (!ta) return false;
+      ta.value = '生成期间改过的第二句';
+      ta.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+      return true;
+    })()`
+  );
+  await wait(1600);
+  const secondText = await evalJs(win, `document.querySelectorAll('.line')[1].querySelector('.line-text')?.textContent || ''`);
+  check("生成期间修改的其他台词不被覆盖", editHandled === true && secondText.includes("生成期间改过"), secondText.trim());
+
+  // 6. AI 重拆本章清理旧音频
+  await reload(win);
+  await clickChapter(win, "第二章");
+  await wait(200);
+  await evalJs(win, `document.querySelector('.tool-menu summary')?.click()`);
+  await wait(100);
+  const aiRebuildClicked = await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('AI 重拆本章')); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(800);
+  const aiDeletes = await evalJs(win, `window.__fetchLog.audioDeletes`);
+  check("AI 重拆本章清理旧音频", aiRebuildClicked === true && aiDeletes.includes("keep-me.wav"), JSON.stringify(aiDeletes));
+
+  // 7. 拖动语速滑块时只在松手后落盘
+  await reload(win);
+  savedProjects.length = 0;
+  await evalJs(
+    win,
+    `(() => {
+      const slider = document.querySelector('.slider');
+      if (!slider) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(slider, '1.25');
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`
+  );
+  await wait(250);
+  const duringDragSaves = savedProjects.length;
+  await evalJs(win, `document.querySelector('.slider').dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))`);
+  await wait(500);
+  const speedPersisted = savedProjects.some((p) => p.chapters[0].lines[0].speed === 1.25);
+  check("语速拖动只在松手后落盘", duringDragSaves === 0 && speedPersisted, `during=${duringDragSaves} persisted=${speedPersisted}`);
+
+  const failed = results.filter((r) => !r.pass).length;
+  console.log(`\nRESULT ${failed === 0 ? "GREEN" : "RED"} ${results.length - failed}/${results.length}`);
+  app.exit(failed ? 1 : 0);
+});

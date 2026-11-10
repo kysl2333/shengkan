@@ -98,22 +98,27 @@ export default function TopBar({
 
   useEffect(() => {
     let alive = true;
-    getHealth()
-      .then((h) => {
-        if (!alive) return;
-        setEngine({
-          online: Boolean(h.ok),
-          model: h.model_loaded,
-          gpu: h.gpu
-            ? `${h.gpu.used_gb ?? Math.max(0, h.gpu.total_gb - h.gpu.free_gb)}/${h.gpu.total_gb} GB`
-            : "",
+    const check = () => {
+      getHealth()
+        .then((h) => {
+          if (!alive) return;
+          setEngine({
+            online: Boolean(h.ok),
+            model: h.model_loaded,
+            gpu: h.gpu
+              ? `${h.gpu.used_gb ?? Math.max(0, h.gpu.total_gb - h.gpu.free_gb)}/${h.gpu.total_gb} GB`
+              : "",
+          });
+        })
+        .catch(() => {
+          if (alive) setEngine((prev) => ({ ...prev, online: false }));
         });
-      })
-      .catch(() => {
-        if (alive) setEngine((prev) => ({ ...prev, online: false }));
-      });
+    };
+    check();
+    const timer = window.setInterval(check, 20000);
     return () => {
       alive = false;
+      window.clearInterval(timer);
     };
   }, []);
 

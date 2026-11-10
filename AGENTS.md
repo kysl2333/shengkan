@@ -247,6 +247,13 @@ npm.cmd run build
 
 涉及导入时，用一个小 EPUB 走一遍：拖入 → 预览章数和标题 → 导入 → 工作台能看到章节和台词。
 
+涉及工作台状态、章节切换或生成时，再跑：
+
+```powershell
+cd app
+npm.cmd run check:studio
+```
+
 涉及 AI 时，设置页「测试」会真实请求当前 AI 服务商一次，别反复点。
 
 ## Agent skills

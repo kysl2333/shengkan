@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getVoices, splitText, synthesize, audioUrl, deleteAudio } from "../api";
 import { annotateLines, cancelAi, onAiProgress, extractCasts, emptyAiUsage, addAiUsage } from "../ai";
 import { cloudTTS } from "../cloud";
@@ -36,6 +36,10 @@ function formatClock(seconds: number) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function lineStatusKey(chapterKey: string, lineId: number) {
+  return `${chapterKey}:${lineId}`;
+}
+
 async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   let cursor = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -70,6 +74,7 @@ export default function Studio({
   const [logs, setLogs] = useState<string[]>([]);
   const [speed, setSpeed] = useState(1);
   const [genState, setGenState] = useState<"idle" | "generating" | "done" | "error">("idle");
+  const [cancelableGen, setCancelableGen] = useState(false);
   const [genMsg, setGenMsg] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
   const [speakerFor, setSpeakerFor] = useState<number | null>(null);
@@ -89,21 +94,42 @@ export default function Studio({
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [editingSource, setEditingSource] = useState(false);
   const [sourceDraft, setSourceDraft] = useState("");
-  const [lineStatus, setLineStatus] = useState<Record<number, "generating" | "error" | "">>({});
+  const [lineStatus, setLineStatus] = useState<Record<string, "generating" | "error" | "">>({});
   const [toast, setToast] = useState("");
   const [genDialog, setGenDialog] = useState(false);
   const [roleMenu, setRoleMenu] = useState(false);
   const annBatchRef = useRef(0);
   const genStopRef = useRef(false);
   const ranActionRef = useRef("");
+  const projectRef = useRef(project);
+  const chapterIdRef = useRef(chapterId);
+
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
+    chapterIdRef.current = chapterId;
+  }, [chapterId]);
 
   useEffect(() => {
     const first = project?.chapters[0];
     if (first) {
+      chapterIdRef.current = first.id;
       setChapterId(first.id);
       setScript(first.lines);
+      setEditingSource(false);
+      setSourceDraft("");
     }
   }, [project?.id]);
+
+  // 章节切换时清掉只属于上一章的编辑态；生成状态按「章节 + 句号」隔离。
+  useLayoutEffect(() => {
+    setChecked(new Set());
+    setEditing(null);
+    setSpeakerFor(null);
+    setLineMenu(null);
+  }, [chapterId]);
 
   useEffect(() => {
     const c = project?.chapters.find((x) => x.id === chapterId);
@@ -210,17 +236,69 @@ export default function Studio({
     setLogs((prev) => [...prev, `${ts} ${msg}`]);
   }
 
+  function blockWhileGenerating(action: string) {
+    if (genState !== "generating") return false;
+    showToast(`正在生成音频，先停止再${action}`);
+    return true;
+  }
+
   function saveLines(next: ProjectLine[], casts?: ProjectCast[]) {
-    setScript(next);
-    if (project && chapter) {
-      onSave({
-        ...project,
-        casts: casts ?? project.casts,
-        chapters: project.chapters.map((c) =>
+    if (chapterIdRef.current === chapter?.id) setScript(next);
+    const base = projectRef.current;
+    if (base && chapter) {
+      const nextProject = {
+        ...base,
+        casts: casts ?? base.casts,
+        chapters: base.chapters.map((c) =>
           c.id === chapter.id ? { ...c, lines: next } : c
         ),
-      });
+      };
+      projectRef.current = nextProject;
+      onSave(nextProject);
     }
+  }
+
+  function clearChapterStatus(chapterKey: string) {
+    setLineStatus((prev) => {
+      const prefix = `${chapterKey}:`;
+      const keys = Object.keys(prev).filter((key) => key.startsWith(prefix));
+      if (!keys.length) return prev;
+      const next = { ...prev };
+      for (const key of keys) delete next[key];
+      return next;
+    });
+  }
+
+  // 生成类异步操作只合并目标章节，避免用旧快照覆盖其他章节或把已删除的句子写回来。
+  function saveChapterLines(
+    targetChapterId: string,
+    updater: (lines: ProjectLine[]) => ProjectLine[],
+    casts?: ProjectCast[],
+    persist = true
+  ) {
+    const base = projectRef.current;
+    if (!base) return;
+    const target = base.chapters.find((c) => c.id === targetChapterId);
+    if (!target) return;
+    const lines = updater(target.lines);
+    const nextProject = {
+      ...base,
+      casts: casts ?? base.casts,
+      chapters: base.chapters.map((c) =>
+        c.id === targetChapterId ? { ...c, lines } : c
+      ),
+    };
+    projectRef.current = nextProject;
+    if (persist) onSave(nextProject);
+    if (persist && chapterIdRef.current === targetChapterId) setScript(lines);
+  }
+
+  function persistProject() {
+    const base = projectRef.current;
+    if (!base) return;
+    onSave(base);
+    const current = base.chapters.find((c) => c.id === chapterIdRef.current);
+    if (current) setScript(current.lines);
   }
 
   function nextAudio(line: ProjectLine, url: string): ProjectLine {
@@ -233,6 +311,20 @@ export default function Studio({
     return { ...line, audio: url, audioHistory: history, status: "done" as const };
   }
 
+  // 生成期间台词被改过，旧文本的音频不能挂到新文本上。
+  function applyGeneratedAudio(current: ProjectLine, snapshot: ProjectLine, url: string): ProjectLine {
+    const changed =
+      current.text !== snapshot.text ||
+      current.speaker !== snapshot.speaker ||
+      current.emotion !== snapshot.emotion ||
+      Number(current.speed) !== Number(snapshot.speed);
+    if (changed) {
+      deleteAudio(url);
+      return { ...current, status: "dirty" as const };
+    }
+    return nextAudio(current, url);
+  }
+
   function switchAudio(line: ProjectLine) {
     if (!line.audio || !line.audioHistory?.length) return;
     const prev = line.audioHistory[0];
@@ -240,15 +332,33 @@ export default function Studio({
     updateLine(line.id, { audio: prev, audioHistory: rest, status: "done" });
   }
 
-  function updateLine(id: number, patch: Partial<ProjectLine>, casts?: ProjectCast[]) {
-    saveLines(
-      script.map((l) =>
-        l.id === id
-          ? { ...l, ...patch, status: (patch.status ?? "dirty") as ProjectLine["status"] }
-          : l
-      ),
-      casts
+  function updateLine(
+    id: number,
+    patch: Partial<ProjectLine>,
+    casts?: ProjectCast[],
+    persist = true
+  ) {
+    const next = script.map((l) =>
+      l.id === id
+        ? { ...l, ...patch, status: (patch.status ?? "dirty") as ProjectLine["status"] }
+        : l
     );
+    if (persist) {
+      saveLines(next, casts);
+      return;
+    }
+    // 拖动滑块时只更新界面和内存，松手后再落盘。
+    setScript(next);
+    const base = projectRef.current;
+    if (base && chapter) {
+      projectRef.current = {
+        ...base,
+        casts: casts ?? base.casts,
+        chapters: base.chapters.map((c) =>
+          c.id === chapter.id ? { ...c, lines: next } : c
+        ),
+      };
+    }
   }
 
   function newCast(name: string): ProjectCast {
@@ -295,6 +405,7 @@ export default function Studio({
 
   async function addRoleToChapter(name: string) {
     if (!project) return;
+    if (blockWhileGenerating("添加本章角色")) return;
     const clean = name.trim();
     if (!clean) return;
     if (clean === "未知") {
@@ -360,6 +471,7 @@ export default function Studio({
   }
 
   function prependLine() {
+    if (blockWhileGenerating("插入台词")) return;
     const id = Math.max(0, ...script.map((l) => l.id)) + 1;
     const line: ProjectLine = {
       id,
@@ -377,20 +489,38 @@ export default function Studio({
   }
 
   function deleteLine(id: number) {
-    const target = script.find((l) => l.id === id);
-    if (target?.audio) deleteAudio(target.audio);
-    target?.audioHistory?.forEach((file) => deleteAudio(file));
+    if (blockWhileGenerating("删除台词")) return;
     const next = script.filter((l) => l.id !== id);
     if (!next.length) {
       setGenMsg("至少保留一句台词");
       return;
     }
+    const target = script.find((l) => l.id === id);
+    if (target?.audio) deleteAudio(target.audio);
+    target?.audioHistory?.forEach((file) => deleteAudio(file));
     saveLines(next);
     if (current === id) setCurrent(next[0].id);
+    if (editing === id) setEditing(null);
+    if (speakerFor === id) setSpeakerFor(null);
+    setChecked((prev) => {
+      if (!prev.has(id)) return prev;
+      const cleared = new Set(prev);
+      cleared.delete(id);
+      return cleared;
+    });
+    setLineStatus((prev) => {
+      const key = lineStatusKey(chapter?.id ?? "", id);
+      if (!(key in prev)) return prev;
+      const cleared = { ...prev };
+      delete cleared[key];
+      return cleared;
+    });
+    setLineMenu(null);
     log("edit", "删除台词", { id, left: next.length });
   }
 
   function insertLine(afterId?: number) {
+    if (blockWhileGenerating("插入台词")) return;
     const id = Math.max(0, ...script.map((l) => l.id)) + 1;
     const line: ProjectLine = {
       id,
@@ -409,8 +539,17 @@ export default function Studio({
     log("edit", "插入台词", { afterId: afterId ?? null, id });
   }
 
+  function openChapter(target: ProjectChapter) {
+    chapterIdRef.current = target.id;
+    setChapterId(target.id);
+    setCurrent(target.lines[0]?.id ?? 1);
+    setEditingSource(false);
+    setSourceDraft("");
+  }
+
   async function addChapter() {
     if (!project) return;
+    if (blockWhileGenerating("新建章节")) return;
     const title = await askText("章节标题", `第 ${project.chapters.length + 1} 章`);
     if (!title?.trim()) return;
     const next: ProjectChapter = {
@@ -420,6 +559,7 @@ export default function Studio({
       lines: [],
     };
     onSave({ ...project, chapters: [...project.chapters, next] });
+    chapterIdRef.current = next.id;
     setChapterId(next.id);
     setScript([]);
     setSourceDraft("");
@@ -442,6 +582,7 @@ export default function Studio({
 
   async function deleteChapter(target: ProjectChapter) {
     if (!project) return;
+    if (blockWhileGenerating("删除章节")) return;
     if (project.chapters.length <= 1) {
       setGenMsg("至少保留一章");
       return;
@@ -453,10 +594,10 @@ export default function Studio({
       line.audioHistory?.forEach((file) => deleteAudio(file));
     }
     const rest = project.chapters.filter((c) => c.id !== target.id);
+    clearChapterStatus(target.id);
     onSave({ ...project, chapters: rest });
     if (chapterId === target.id) {
-      setChapterId(rest[0].id);
-      setScript(rest[0].lines);
+      openChapter(rest[0]);
     }
     log("chapter", "删除章节", { id: target.id, title: target.title, lines: target.lines.length });
   }
@@ -489,6 +630,7 @@ export default function Studio({
 
   async function runSplit() {
     if (task === "running") return;
+    if (blockWhileGenerating("重拆台词")) return;
     const source = chapter?.source?.trim();
     if (!source) {
       setGenMsg("这一章没有原文，导入时保留原文才能重新拆分");
@@ -531,7 +673,8 @@ export default function Studio({
       const low = r.segments.filter((s) => s.confidence < 0.7).length;
       if (low) addLog(`低置信度 ${low} 句，可用 AI 标注角色`);
       saveLines(lines, casts);
-      setCurrent(lines[0]?.id ?? 1);
+      if (chapter?.id) clearChapterStatus(chapter.id);
+      if (chapterIdRef.current === chapter?.id) setCurrent(lines[0]?.id ?? 1);
       addLog(`写入完成：${lines.length} 句 · ${casts.length} 个角色`);
       setTask("done");
       log("split", "工作台重新拆分", { chapter: chapter?.title, lines: lines.length, casts: casts.length });
@@ -579,6 +722,7 @@ export default function Studio({
 
   async function annotateWithAi() {
     if (annotating || !script.length) return;
+    if (blockWhileGenerating("运行 AI 标注")) return;
     if (!castList.some((c) => c.name !== "旁白" && c.name !== "未知")) {
       setGenMsg("当前没有角色候选，先点「AI 重拆本章」");
       showToast("当前没有角色候选，先点「AI 重拆本章」");
@@ -645,6 +789,7 @@ export default function Studio({
   }
 
   async function aiRebuildChapter() {
+    if (blockWhileGenerating("重拆本章")) return;
     const source = chapter?.source?.trim();
     if (!source) {
       setGenMsg("这一章没有原文，导入时保留原文才能重拆");
@@ -713,8 +858,13 @@ export default function Studio({
         `${project?.title || ""} · ${chapter?.title || ""}`
       );
       usage = addAiUsage(usage, res.usage);
+      for (const old of chapter?.lines ?? []) {
+        if (old.audio) deleteAudio(old.audio);
+        old.audioHistory?.forEach((file) => deleteAudio(file));
+      }
       saveLines(next, casts);
-      setCurrent(next[0]?.id ?? 1);
+      if (chapter?.id) clearChapterStatus(chapter.id);
+      if (chapterIdRef.current === chapter?.id) setCurrent(next[0]?.id ?? 1);
       annBatchRef.current = res.cancelled ? res.nextBatch : 0;
 
       addLog(
@@ -748,6 +898,7 @@ export default function Studio({
 
   async function rebuildAllLines(skipConfirm = false) {
     if (!project || annotating) return;
+    if (blockWhileGenerating("整本重拆")) return;
     if (
       !skipConfirm &&
       !window.confirm(`会重新拆分全部 ${project.chapters.length} 章，只按章节标记拆台词，不新增、不删除、不改名任何角色。继续？`)
@@ -812,7 +963,14 @@ export default function Studio({
 
       const rest = project.chapters.slice(chapters.length);
       onSave({ ...project, chapters: [...chapters, ...rest] });
-      if (chapters[0]) setChapterId(chapters[0].id);
+      setLineStatus({});
+      if (chapters[0]) {
+        chapterIdRef.current = chapters[0].id;
+        setChapterId(chapters[0].id);
+        setCurrent(chapters[0].lines[0]?.id ?? 1);
+        setEditingSource(false);
+        setSourceDraft("");
+      }
       addLog(
         stopped
           ? `整本拆章节已停止：${chapters.length} 章 · ${totalLines} 句`
@@ -834,6 +992,7 @@ export default function Studio({
 
   async function annotateAllChapters(skipConfirm = false) {
     if (!project || annotating) return;
+    if (blockWhileGenerating("整本角色标注")) return;
     if (
       !skipConfirm &&
       !window.confirm(
@@ -1170,23 +1329,26 @@ export default function Studio({
       showToast("正在生成其他句子，先停止或等它完成");
       return;
     }
+    const originChapter = chapter?.id ?? "";
+    const statusKey = lineStatusKey(originChapter, line.id);
+    setCancelableGen(false);
     setGenState("generating");
-    setLineStatus((prev) => ({ ...prev, [line.id]: "generating" }));
+    setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
     setGenMsg(`正在生成第 ${line.id} 句…`);
     showToast(`正在生成第 ${line.id} 句 · ${line.speaker}`);
     try {
       const url = await synthesizeLine(line);
-      saveLines(
-        script.map((l) => (l.id === line.id ? nextAudio(l, url) : l))
+      saveChapterLines(originChapter, (lines) =>
+        lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l))
       );
       setGenState("done");
-      setLineStatus((prev) => ({ ...prev, [line.id]: "" }));
+      setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
       setGenMsg(`第 ${line.id} 句生成完成，正在播放`);
       showToast(`第 ${line.id} 句生成完成`);
       loadAndPlay(audioUrl(url));
     } catch (e) {
       setGenState("error");
-      setLineStatus((prev) => ({ ...prev, [line.id]: "error" }));
+      setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
       setGenMsg((e as Error).message);
       showToast(`第 ${line.id} 句失败：${(e as Error).message}`);
       log("generate", "单句生成失败", {
@@ -1218,11 +1380,11 @@ export default function Studio({
       return;
     }
 
-    setChapterId(target.id);
+    openChapter(target);
     setCurrent(targets[0].id);
     genStopRef.current = false;
+    setCancelableGen(true);
     setGenState("generating");
-    const next = [...target.lines];
     let ok = 0;
     let finished = 0;
     const limit = generationLimit(targets);
@@ -1232,8 +1394,9 @@ export default function Studio({
       setGenMsg(`「${target.title}」 ${finished + 1}/${targets.length} · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
-        const idx = next.findIndex((l) => l.id === line.id);
-        next[idx] = nextAudio(next[idx], url);
+        saveChapterLines(target.id, (lines) =>
+          lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
+        );
         ok++;
       } catch (e) {
         log("generate", "生成失败", {
@@ -1247,13 +1410,7 @@ export default function Studio({
       }
     });
 
-    onSave({
-      ...project,
-      chapters: project.chapters.map((c) =>
-        c.id === target.id ? { ...c, lines: next } : c
-      ),
-    });
-    setScript(next);
+    persistProject();
     setGenState(genStopRef.current ? "idle" : "done");
     setGenMsg(genStopRef.current ? `已停止：完成 ${ok} 句` : `「${target.title}」完成 ${ok} 句`);
     log("generate", "生成本章", { chapter: target.title, ok, total: targets.length });
@@ -1263,10 +1420,11 @@ export default function Studio({
     if (genState === "generating" || !checked.size) return;
     const targets = script.filter((l) => checked.has(l.id) && l.text.trim());
     if (!targets.length) return;
+    const originChapter = chapter?.id ?? "";
 
     genStopRef.current = false;
+    setCancelableGen(true);
     setGenState("generating");
-    const next = [...script];
     let ok = 0;
     let finished = 0;
     const limit = generationLimit(targets);
@@ -1276,9 +1434,9 @@ export default function Studio({
       setGenMsg(`生成勾选 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
-        const idx = next.findIndex((l) => l.id === line.id);
-        next[idx] = nextAudio(next[idx], url);
-        setScript([...next]);
+        saveChapterLines(originChapter, (lines) =>
+          lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
+        );
         ok++;
       } catch (e) {
         log("generate", "生成失败", {
@@ -1292,8 +1450,8 @@ export default function Studio({
       }
     });
 
-    saveLines(next);
     setChecked(new Set());
+    persistProject();
     setGenState(genStopRef.current ? "idle" : "done");
     setGenMsg(genStopRef.current ? `已停止：完成 ${ok} 句` : `勾选生成完成 ${ok} 句`);
     log("generate", "生成勾选", { ok, total: targets.length });
@@ -1303,6 +1461,7 @@ export default function Studio({
     if (genState === "generating") return;
 
     const currentScript = script;
+    const originChapter = chapter?.id ?? "";
     const targets =
       mode === "all"
         ? currentScript.filter((l) => l.text.trim())
@@ -1313,8 +1472,8 @@ export default function Studio({
     }
 
     genStopRef.current = false;
+    setCancelableGen(true);
     setGenState("generating");
-    const next = [...currentScript];
     const failedLines: ProjectLine[] = [];
     let ok = 0;
     let fail = 0;
@@ -1326,9 +1485,9 @@ export default function Studio({
       setGenMsg(`正在生成 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
       try {
         const url = await synthesizeLine(line);
-        const idx = next.findIndex((l) => l.id === line.id);
-        next[idx] = nextAudio(next[idx], url);
-        setScript([...next]);
+        saveChapterLines(originChapter, (lines) =>
+          lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
+        );
         ok++;
       } catch (e) {
         fail++;
@@ -1345,9 +1504,9 @@ export default function Studio({
         setGenMsg(`重试第 ${line.id} 句 · ${line.speaker}`);
         try {
           const url = await synthesizeLine(line);
-          const idx = next.findIndex((l) => l.id === line.id);
-          next[idx] = nextAudio(next[idx], url);
-          setScript([...next]);
+          saveChapterLines(originChapter, (lines) =>
+            lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
+          );
           ok++;
           fail--;
         } catch {
@@ -1356,8 +1515,8 @@ export default function Studio({
       });
     }
 
-    saveLines(next);
     const stopped = genStopRef.current;
+    persistProject();
 
     if (stopped) {
       setGenState("idle");
@@ -1419,13 +1578,16 @@ export default function Studio({
           </button>
           <button
             className="btn small primary"
+            disabled={genState === "generating" && !cancelableGen}
             onClick={
               genState === "generating"
-                ? stopGenerate
+                ? cancelableGen
+                  ? stopGenerate
+                  : undefined
                 : () => setGenDialog(true)
             }
           >
-            {genState === "generating" ? "取消生成" : "生成"}
+            {genState === "generating" ? (cancelableGen ? "取消生成" : "生成中…") : "生成"}
           </button>
         </div>
       </div>
@@ -1440,14 +1602,10 @@ export default function Studio({
                 className={`chapter ${chapter?.id === c.id ? "active" : ""}`}
                 tabIndex={0}
                 aria-current={chapter?.id === c.id ? "true" : undefined}
-                onClick={() => {
-                  setChapterId(c.id);
-                  setCurrent(1);
-                }}
+                onClick={() => openChapter(c)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && e.target === e.currentTarget) {
-                    setChapterId(c.id);
-                    setCurrent(1);
+                    openChapter(c);
                   }
                 }}
               >
@@ -1613,12 +1771,12 @@ export default function Studio({
                       <span className="tag speed">{Number(line.speed).toFixed(2)}×</span>
                       <span
                         className={`line-status ${
-                          lineStatus[line.id] === "error" ? "error" : line.status
+                          lineStatus[lineStatusKey(chapter?.id ?? "", line.id)] === "error" ? "error" : line.status
                         }`}
                       >
-                        {lineStatus[line.id] === "generating" ? (
+                        {lineStatus[lineStatusKey(chapter?.id ?? "", line.id)] === "generating" ? (
                           <><span className="spinner" />生成中</>
-                        ) : lineStatus[line.id] === "error" ? (
+                        ) : lineStatus[lineStatusKey(chapter?.id ?? "", line.id)] === "error" ? (
                           <><span className="dot" />生成失败</>
                         ) : (
                           <>
@@ -1824,8 +1982,11 @@ export default function Studio({
                       onChange={(e) => {
                         const value = Number(e.target.value);
                         setSpeed(value);
-                        if (selected) updateLine(selected.id, { speed: value });
+                        if (selected) updateLine(selected.id, { speed: value }, undefined, false);
                       }}
+                      onPointerUp={() => persistProject()}
+                      onKeyUp={() => persistProject()}
+                      onBlur={() => persistProject()}
                     />
                     <input
                       className="input speed-number"

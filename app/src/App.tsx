@@ -223,7 +223,7 @@ export default function App() {
           <div className="drop-overlay-inner">
             <div className="drop-icon">⇩</div>
             <b>松手导入</b>
-            <span>支持 .txt / .md / .epub</span>
+            <span>支持 .txt / .md / .epub / .docx</span>
           </div>
         </div>
       )}

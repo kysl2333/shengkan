@@ -552,7 +552,16 @@ export default function Library({
             <div className="modal-body">
               <div
                 className={`dropzone ${dropActive ? "active" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label="选择要导入的文件"
                 onClick={() => !busy && fileRef.current?.click()}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && !busy) {
+                    e.preventDefault();
+                    fileRef.current?.click();
+                  }
+                }}
                 onDragOver={(e) => { if (hasFiles(e)) { e.preventDefault(); e.stopPropagation(); setDropActive(true); } }}
                 onDragLeave={(e) => { e.stopPropagation(); setDropActive(false); }}
                 onDrop={async (e) => {

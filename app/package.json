@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "electron": "electron electron/main.cjs",
+    "check:studio": "npm run build && electron scripts/regression-studio.cjs",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {

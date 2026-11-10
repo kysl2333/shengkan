@@ -40,12 +40,19 @@ $env:SHENGKAN_DEV_URL="http://127.0.0.1:5173"
 npx.cmd electron .
 ```
 
-## 版本管理
-
-仓库主分支是 `main`，日常优化在 `optimize/next-3`（`optimize/next-2` 已合并到 `main`）。
+工作台状态回归检查：
 
 ```powershell
-git switch optimize/next
+cd app
+npm.cmd run check:studio
+```
+
+## 版本管理
+
+仓库主分支是 `main`，当前 UI 与逻辑修复分支是 `design/ui-refresh`（`optimize/next-2` 已合并到 `main`）。
+
+```powershell
+git switch design/ui-refresh
 git status
 git commit -am "fix: 说明改了什么"
 ```

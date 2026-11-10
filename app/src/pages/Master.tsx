@@ -517,7 +517,7 @@ export default function Master({ project }: { project: Project | null }) {
           <div className="panel-box">
             <div className="panel-title"><span>导出设置</span></div>
             <div className="field">
-              <div className="field-label"><span>当前章节内容</span></div>
+              <div className="field-label"><span>导出格式</span></div>
               <select
                 className="select"
                 value={formats}
