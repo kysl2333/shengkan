@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { getHealth } from "../api";
 
 export type PageID = "library" | "studio" | "cast" | "master" | "settings";
+type Theme = "light" | "dark";
 
 const items: { id: PageID; label: string; icon: ReactNode }[] = [
   {
@@ -58,6 +59,24 @@ const items: { id: PageID; label: string; icon: ReactNode }[] = [
   },
 ];
 
+const SunIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
+  </svg>
+);
+
+const MoonIcon = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />
+  </svg>
+);
+
+function initialTheme(): Theme {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
 export default function TopBar({
   page,
   onNavigate,
@@ -66,6 +85,16 @@ export default function TopBar({
   onNavigate: (p: PageID) => void;
 }) {
   const [engine, setEngine] = useState({ online: false, model: false, gpu: "" });
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("shengkan:theme", theme);
+    } catch {
+      /* 本地存储不可用时只影响下次启动 */
+    }
+  }, [theme]);
 
   useEffect(() => {
     let alive = true;
@@ -91,8 +120,9 @@ export default function TopBar({
   return (
     <header className="topbar">
       <div className="brand">
+        <span className="brand-rule" aria-hidden="true" />
         <span className="brand-mark">声栞</span>
-        <span className="brand-sub">voice studio</span>
+        <span className="brand-sub">配音工作台</span>
       </div>
 
       <nav className="nav" aria-label="主导航">
@@ -109,17 +139,40 @@ export default function TopBar({
         ))}
       </nav>
 
-      <div className="top-status">
-        <div className="status-item" title="语音引擎连接状态">
-          <span className={`dot ${engine.online ? "ok" : "warn"}`} />
-          {engine.model ? "IndexTTS 2.5 已加载" : engine.online ? "引擎在线" : "引擎未连接"}
+      <div className="top-actions">
+        <div className="theme-switch" role="group" aria-label="界面主题">
+          <button
+            className={theme === "light" ? "on" : ""}
+            onClick={() => setTheme("light")}
+            aria-label="日间模式"
+            aria-pressed={theme === "light"}
+            title="日间模式"
+          >
+            {SunIcon}
+          </button>
+          <button
+            className={theme === "dark" ? "on" : ""}
+            onClick={() => setTheme("dark")}
+            aria-label="夜间模式"
+            aria-pressed={theme === "dark"}
+            title="夜间模式"
+          >
+            {MoonIcon}
+          </button>
         </div>
-        {engine.gpu && (
-          <div className="status-item">
-            <span className="dot" />
-            显存 {engine.gpu}
+
+        <div className="top-status">
+          <div className="status-item" title="语音引擎连接状态">
+            <span className={`dot ${engine.online ? "ok" : "warn"}`} />
+            {engine.model ? "IndexTTS 2.5 已加载" : engine.online ? "引擎在线" : "引擎未连接"}
           </div>
-        )}
+          {engine.gpu && (
+            <div className="status-item">
+              <span className="dot" />
+              显存 {engine.gpu}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

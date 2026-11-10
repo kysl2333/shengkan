@@ -80,6 +80,7 @@ function ExportPlayer({ src }: { src: string }) {
     <div className="export-player">
       <button
         className="play-btn"
+        aria-label={playing ? "暂停播放" : "播放导出音频"}
         onClick={() => {
           const audio = audioRef.current;
           if (!audio) return;

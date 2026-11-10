@@ -8,10 +8,11 @@ export function askText(
   return new Promise((resolve) => {
     const mask = document.createElement("div");
     mask.className = "modal-mask";
-    mask.style.zIndex = "200";
 
     const modal = document.createElement("div");
     modal.className = "modal prompt-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
 
     const head = document.createElement("div");
     head.className = "modal-head";
@@ -90,10 +91,11 @@ export interface VoiceEditValue {
 export function showAiDone(title: string, usage: AiUsage, summary: string) {
   const mask = document.createElement("div");
   mask.className = "modal-mask";
-  mask.style.zIndex = "210";
 
   const modal = document.createElement("div");
   modal.className = "modal ai-done-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
 
   const head = document.createElement("div");
   head.className = "modal-head";
@@ -155,10 +157,11 @@ export function askVoiceEdit(
   return new Promise((resolve) => {
     const mask = document.createElement("div");
     mask.className = "modal-mask";
-    mask.style.zIndex = "200";
 
     const modal = document.createElement("div");
     modal.className = "modal prompt-modal voice-edit-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
 
     const head = document.createElement("div");
     head.className = "modal-head";

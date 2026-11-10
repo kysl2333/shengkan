@@ -777,6 +777,7 @@ export default function Cast({
                     <div className="voice-foot">
                       <button
                         className={`voice-play ${playingPath === v.path ? "playing" : ""}`}
+                        aria-label={playingPath === v.path && !paused ? "暂停试听" : "试听音色"}
                         onClick={() => toggleVoice(v)}
                       >
                         {playingPath === v.path && !paused ? "❚❚" : "▶"}
@@ -824,6 +825,7 @@ export default function Cast({
                         <div className="voice-foot">
                           <button
                             className={`voice-play ${cloudPreview === v.id ? "playing" : ""}`}
+                            aria-label="试听云音色"
                             onClick={() => previewCloud(v)}
                             disabled={!!cloudPreview}
                           >
@@ -879,7 +881,7 @@ export default function Cast({
                 <div className="modal-title">设计音色卡</div>
                 <div className="modal-desc">先试听，满意再保存成云音色卡。取消不会写入音色库。</div>
               </div>
-              <button className="modal-close" onClick={() => !designBusy && closeDesign()}>✕</button>
+              <button className="modal-close" aria-label="关闭" onClick={() => !designBusy && closeDesign()}>✕</button>
             </div>
 
             <div className="modal-body">

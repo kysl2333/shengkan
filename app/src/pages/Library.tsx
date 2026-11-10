@@ -22,7 +22,7 @@ import { detectChapters, cancelAi, getAiConfig, onAiProgress } from "../ai";
 import { log } from "../log";
 import { askText, showAiDone } from "../prompt";
 
-const covers = ["cover-a", "cover-b", "cover-c"];
+const covers = ["cover-a", "cover-b", "cover-c", "cover-d"];
 const ACCEPT = ".txt,.md,.markdown,.epub,.docx";
 
 function hashText(text: string) {
@@ -441,7 +441,15 @@ export default function Library({
           <article
             className="project"
             key={p.id}
+            tabIndex={0}
+            role="button"
             onClick={() => onOpen(p.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen(p.id);
+              }
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenu({
@@ -473,7 +481,18 @@ export default function Library({
           </article>
         ))}
 
-        <article className="project project-new" onClick={openImport}>
+        <article
+          className="project project-new"
+          tabIndex={0}
+          role="button"
+          onClick={openImport}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openImport();
+            }
+          }}
+        >
           <div className="project-new-inner">
             <span className="plus">＋</span>
             <b>新建项目</b>
@@ -527,7 +546,7 @@ export default function Library({
                 <div className="modal-title">导入剧本</div>
                 <div className="modal-desc">拖入文件或用下面的输入框，导入前可以先核对章节。</div>
               </div>
-              <button className="modal-close" onClick={() => !busy && setImportOpen(false)}>✕</button>
+              <button className="modal-close" aria-label="关闭" onClick={() => !busy && setImportOpen(false)}>✕</button>
             </div>
 
             <div className="modal-body">
@@ -681,7 +700,7 @@ export default function Library({
                 <div className="modal-title">编辑整本 · {editTarget.title}</div>
                 <div className="modal-desc">整本操作会打开项目并开始执行，工作台会显示进度，可以随时停止。</div>
               </div>
-              <button className="modal-close" onClick={() => setEditTarget(null)}>✕</button>
+              <button className="modal-close" aria-label="关闭" onClick={() => setEditTarget(null)}>✕</button>
             </div>
             <div className="modal-body">
               <button
@@ -727,7 +746,7 @@ export default function Library({
                 <div className="modal-title">回收站</div>
                 <div className="modal-desc">删除的项目先放这里，可以还原，也可以彻底删除。</div>
               </div>
-              <button className="modal-close" onClick={() => !trashBusy && setTrashOpen(false)}>✕</button>
+              <button className="modal-close" aria-label="关闭" onClick={() => !trashBusy && setTrashOpen(false)}>✕</button>
             </div>
 
             <div className="modal-body">

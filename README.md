@@ -6,7 +6,8 @@
 
 ```
 声栞/
-├─ design/preview.html   静态视觉稿
+├─ design/preview.html   旧版静态视觉稿（仅历史参考）
+├─ DESIGN.md             规范级设计 token、主题和组件规则
 ├─ app/                  Electron + React 桌面应用
 │  ├─ src/               页面、组件、导入解析、AI 桥接
 │  └─ electron/          主进程、项目读写、引擎管理、AI 调用、日志
@@ -20,6 +21,10 @@
 ├─ start.bat             启动入口
 └─ README.md             本文件
 ```
+
+## 界面
+
+默认是日间主题：纸白工作台、白色文稿、装订绿操作、黄铜播放头。顶栏右侧可以切到夜间，选择会记住。设计 token 和主题规则见 `DESIGN.md`。
 
 ## 启动
 

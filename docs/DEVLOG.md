@@ -1,5 +1,47 @@
 # 开发记录
 
+## 2026-11-11 · 浅色编辑室与双主题
+
+### 设计决策
+
+- 用户要「以白色为主」，但纯白界面容易变成通用 SaaS；所以把白色放在「纸」上，工作台底色用纸灰，文稿用纯白，形成书桌和纸的关系
+- 主题不是简单的 `prefers-color-scheme` 反相：日间是纸白编辑室，夜间是关灯后的同一间编辑室，绿色和黄铜都要保留
+- 项目库用书封而不是卡片：竖排书名、书脊、平涂封面色，既有识别度，也让「小说/剧本」这件事进入界面
+- 颜色分工固定：装订绿 = 操作和当前项，黄铜 = 时间/播放头/改动，朱砂 = 错误和删除
+- 不用渐变、发光、毛玻璃，避免常见的 AI 界面质感
+
+### 完成
+
+- 重写 `app/src/styles.css`：日间/夜间两套 token，浅色优先
+- `app/index.html` 在 React 前读取主题，避免刷新时闪白
+- `TopBar` 增加日间/夜间切换、主题持久化、品牌新结构
+- 项目库书封增加 `cover-d`，四种封面色轮换
+- 角色头像恢复彩色描边；删除按钮改为默认灰色、悬停才变红
+- 时间轴色块改为实色填充，不再像线框
+- 主按钮增加 `--on-accent`，夜间自动用深色字
+- 主题、关闭、播放、台词/章节操作等图标按钮补 `aria-label`
+- 台词行、章节行、项目卡补键盘操作
+- `prompt.ts` 的弹窗去掉硬编码 z-index，补 dialog 语义
+
+### 验证
+
+- `npm.cmd run build` 通过
+- Electron 离屏截图 1600×870：项目库、工作台、角色、成片、设置、导入弹窗，日间/夜间各一套
+- 对比度脚本检查：浅色正文 16.3:1，次级 7.2:1，三级 5.3:1；夜间正文 12.4:1
+- `gradient` / `letter-spacing` / `backdrop-filter` / `will-change` 检查为空
+- 过渡时长检查：交互反馈 0.15–0.18s，没有动画 `width`
+- `npx @google/design.md lint DESIGN.md` 通过：0 errors；1 个 warning（没有名为 `primary` 的 token，主色使用 `accent`）
+- `npx @google/design.md export --format css-tailwind DESIGN.md` 正常输出 `--color-*`、`--font-*`、`--text-*`
+
+### 坑
+
+- 夜间模式如果直接复用浅色 token，浅绿按钮上的白字只有 1.9:1；需要单独的 `--on-accent`
+- 深色主题里「白色卡片」反相后是深色，active 控件不能继续用 `--surface`，否则看起来像凹进去；补了 `--surface-4`
+- 书封竖排标题用 `writing-mode: vertical-rl` + `text-orientation: upright`，长标题会从底部裁掉，需要限制高度
+- 下拉箭头的旧写法是两个 `linear-gradient` 小三角；按基线要求改成内联 SVG 的 data URI
+- `.play-btn` 和主题按钮都是图标按钮，没有 `aria-label` 时屏幕阅读器只会读到一个符号
+- 章节操作按钮即使 `opacity: 0` 仍然占宽，1200px 下会把章节标题挤成「雨夜…」；改成绝对定位浮层后才正常
+
 ## 2026-11-10 · 界面重构
 
 ### 设计决策

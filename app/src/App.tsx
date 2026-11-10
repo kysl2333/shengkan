@@ -21,7 +21,7 @@ import {
   type ProjectAction,
 } from "./projects";
 
-const CAST_COLORS = ["#C08A4E", "#6E9E96", "#B4685A", "#7E8FA6", "#A88C61", "#8C7AA6"];
+const CAST_COLORS = ["#2f6b57", "#a9763c", "#a94f38", "#465a6b", "#6b7d5e", "#8a6a4f"];
 
 export default function App() {
   const [page, setPage] = useState<PageID>("studio");

@@ -16,7 +16,8 @@
 |---|---|
 | `README.md` | 用户视角的安装、启动、接口 |
 | `docs/HANDOFF.md` | 当前状态、配置、已知限制、待办 |
-| `docs/DESIGN.md` | 视觉和交互原则，改 UI 前必读 |
+| `DESIGN.md` | 规范级设计 token、主题和组件规则，改 UI 前先看 |
+| `docs/DESIGN.md` | 设计意图和交互原则；token 以根目录 `DESIGN.md` 为准 |
 | `docs/DEVLOG.md` | 每次开发的验证结果和踩坑 |
 | `CHANGELOG.md` | 用户可见的改动记录 |
 
@@ -143,11 +144,13 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 ## 约定
 
 - 界面和文档全中文，代码标识符用英文。
+- 主题存在 `<html data-theme="light|dark">`，选择写 `localStorage` 的 `shengkan:theme`；默认 `light`，`index.html` 在 React 前先读，避免闪白。
+- 颜色只用 `styles.css` 里的语义 token：`--accent` 是操作，`--brass` 是时间，`--danger` 是错误/删除；不要在组件里写死颜色。
 - 每章台词保存时整本 `project.json` 重写，暂时没有增量保存。
 - 删除项目一律走 `projects.cjs` 的 `trashProject`，不要直接 `fs.rm` 项目目录。彻底删除只在回收站里做。
 - 页面不要引入重型状态库，现有 `useState` + props 足够。
 - 不引入原生模块依赖；Electron 打包要跨机器可用，纯 JS 优先。
-- 新增 UI 先看 `docs/DESIGN.md`：深炭灰外壳、米白稿纸、铜色强调、台词用宋体。
+- 新增 UI 先看根目录 `DESIGN.md` 和 `docs/DESIGN.md`：纸白工作台、白色文稿、装订绿操作、黄铜时间、朱砂危险；默认日间，可切夜间。
 - 假按钮和假数据不要留。新增占位 UI 要标注「未接入」。
 - 音频播放必须复用同一个 `HTMLAudioElement`，否则没法暂停。底部播放条要和真实音频的 `currentTime / duration / paused` 绑定，不能写死时间。
 - 默认音色不能用「中文男声」这类搜索词，必须读 `/v1/voices` 的 `gender / age` 字段匹配。

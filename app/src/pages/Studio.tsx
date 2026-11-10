@@ -1438,9 +1438,17 @@ export default function Studio({
               <div
                 key={c.id}
                 className={`chapter ${chapter?.id === c.id ? "active" : ""}`}
+                tabIndex={0}
+                aria-current={chapter?.id === c.id ? "true" : undefined}
                 onClick={() => {
                   setChapterId(c.id);
                   setCurrent(1);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.target === e.currentTarget) {
+                    setChapterId(c.id);
+                    setCurrent(1);
+                  }
                 }}
               >
                 <span className="chapter-no">{String(i + 1).padStart(2, "0")}</span>
@@ -1451,9 +1459,9 @@ export default function Studio({
                   }`}
                 />
                 <div className="chapter-actions">
-                  <button title="生成本章" onClick={(e) => { e.stopPropagation(); generateChapter(c); }}>▶</button>
-                  <button title="重命名" onClick={(e) => { e.stopPropagation(); renameChapter(c); }}>✎</button>
-                  <button title="删除章节" onClick={(e) => { e.stopPropagation(); deleteChapter(c); }}>✕</button>
+                  <button aria-label="生成本章" title="生成本章" onClick={(e) => { e.stopPropagation(); generateChapter(c); }}>▶</button>
+                  <button aria-label="重命名章节" title="重命名" onClick={(e) => { e.stopPropagation(); renameChapter(c); }}>✎</button>
+                  <button aria-label="删除章节" title="删除章节" onClick={(e) => { e.stopPropagation(); deleteChapter(c); }}>✕</button>
                 </div>
               </div>
             ))}
@@ -1487,9 +1495,17 @@ export default function Studio({
                   key={line.id}
                   id={`line-${line.id}`}
                   className={`line ${current === line.id ? "current" : ""}`}
+                  tabIndex={0}
+                  aria-current={current === line.id ? "true" : undefined}
                   onClick={() => {
                     setCurrent(line.id);
                     setSpeakerFor(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.target === e.currentTarget) {
+                      setCurrent(line.id);
+                      setSpeakerFor(null);
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1504,15 +1520,26 @@ export default function Studio({
                   <label className="line-check" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
+                      aria-label={`选择第 ${line.id} 句`}
                       checked={checked.has(line.id)}
                       onChange={() => toggleCheck(line.id)}
                     />
                   </label>
                   <div
                     className="line-speaker"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={speakerFor === line.id}
                     onClick={(e) => {
                       e.stopPropagation();
                       setSpeakerFor(speakerFor === line.id ? null : line.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSpeakerFor(speakerFor === line.id ? null : line.id);
+                      }
                     }}
                     title="点击更换角色"
                   >
@@ -1604,6 +1631,7 @@ export default function Studio({
                         {line.audioHistory?.length ? (
                           <button
                             title="切换上一个音频"
+                            aria-label="切换上一个音频"
                             onClick={(e) => {
                               e.stopPropagation();
                               switchAudio(line);
@@ -1612,13 +1640,15 @@ export default function Studio({
                             ⇄
                           </button>
                         ) : null}
-                        <button title="生成这句" onClick={(e) => { e.stopPropagation(); generateSingle(line); }}>↻</button>
-                        <button title="系统语音试听（临时）" onClick={(e) => { e.stopPropagation(); speakSystem(line.text); }}>♪</button>
-                        <button title="在下方插入台词" onClick={(e) => { e.stopPropagation(); insertLine(line.id); }}>＋</button>
-                        <button title="删除这句" onClick={(e) => { e.stopPropagation(); deleteLine(line.id); }}>✕</button>
+                        <button title="生成这句" aria-label="生成这句" onClick={(e) => { e.stopPropagation(); generateSingle(line); }}>↻</button>
+                        <button title="系统语音试听（临时）" aria-label="系统语音试听" onClick={(e) => { e.stopPropagation(); speakSystem(line.text); }}>♪</button>
+                        <button title="在下方插入台词" aria-label="在下方插入台词" onClick={(e) => { e.stopPropagation(); insertLine(line.id); }}>＋</button>
+                        <button title="删除这句" aria-label="删除这句" onClick={(e) => { e.stopPropagation(); deleteLine(line.id); }}>✕</button>
                       </div>
                       <button
                         className="line-play"
+                        title="播放这句"
+                        aria-label="播放这句"
                         onClick={(e) => {
                           e.stopPropagation();
                           playLine(line);
@@ -1679,7 +1709,12 @@ export default function Studio({
           </div>
 
           <div className={`player ${audioPlaying ? "playing" : ""}`}>
-            <button className="play-btn" onClick={togglePlay} title="播放 / 暂停">
+            <button
+              className="play-btn"
+              onClick={togglePlay}
+              title="播放 / 暂停"
+              aria-label={audioPlaying ? "暂停播放" : "播放当前音频"}
+            >
               {audioPlaying ? "❚❚" : "▶"}
             </button>
             <span className="time">{formatClock(audioTime)} / {formatClock(audioDuration)}</span>
@@ -1860,6 +1895,7 @@ export default function Studio({
                       <div className="cast-jump" onClick={(e) => e.stopPropagation()}>
                         <button
                           title="上一句"
+                          aria-label="上一句"
                           onClick={() => jumpRole(c.name, -1)}
                           disabled={count < 2}
                         >
@@ -1873,10 +1909,12 @@ export default function Studio({
                           value={rolePos >= 0 ? rolePos + 1 : 1}
                           onChange={(e) => jumpRoleTo(c.name, Number(e.target.value) - 1)}
                           title="输入第几句并跳转"
+                          aria-label={`跳到${c.name}的第几句`}
                         />
                         <span>/{count}</span>
                         <button
                           title="下一句"
+                          aria-label="下一句"
                           onClick={() => jumpRole(c.name, 1)}
                           disabled={count < 2}
                         >
@@ -1928,7 +1966,7 @@ export default function Studio({
                   {selectedCast?.cloudVoice ? " · 云端生成，保留本地音频" : " · 本地或远端 Gradio"}<br />
                   并发按音色自动调整 · 只跑待生成或改动过的句子
                   {genMsg && (
-                    <div style={{ marginTop: 6, color: genState === "error" ? "#c4553f" : "var(--teal)" }}>
+                    <div style={{ marginTop: 6, color: genState === "error" ? "var(--danger)" : "var(--teal)" }}>
                       {genMsg}
                     </div>
                   )}
@@ -2035,7 +2073,7 @@ export default function Studio({
                   本章共 {allCount} 句，{pendingCount} 句待生成或改动过。
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setGenDialog(false)}>✕</button>
+              <button className="modal-close" aria-label="关闭" onClick={() => setGenDialog(false)}>✕</button>
             </div>
             <div className="modal-body">
               <p className="tool-help" style={{ marginBottom: 12 }}>
