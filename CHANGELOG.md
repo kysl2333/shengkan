@@ -25,7 +25,7 @@
 - 去掉弹窗全屏 `backdrop-filter` 模糊
 - 过渡只保留 `transform / opacity / background-color`
 - 原文段落启用 `content-visibility: auto`
-- `styles-additions.css` 并入主样式表，`main.tsx` 不再加载第二份覆盖样式
+- `styles-additions.css` 并入主样式表，`main.tsx` 不再加载第二份覆盖样式；原文件已移到回收站
 
 ### 验证
 

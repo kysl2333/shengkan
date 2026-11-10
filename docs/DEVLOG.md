@@ -11,7 +11,7 @@
 
 ### 完成
 
-- 重写 `app/src/styles.css`，合并 `styles-additions.css` 中所有历史覆盖规则
+- 重写 `app/src/styles.css`，合并 `styles-additions.css` 中所有历史覆盖规则；旧文件已移到回收站
 - `main.tsx` 只引入一份样式
 - 顶栏改成图标 + 文字导航，补上引擎离线状态；删掉假的「队列 0」
 - 工作台：当前台词与生成参数合并并前置；AI 工具默认收起、移到最下；播放条加 `playing` 类，VU 只在播放时动

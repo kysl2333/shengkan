@@ -67,7 +67,7 @@
 - 不使用全屏 `backdrop-filter`，弹窗遮罩只用半透明底色。
 - 过渡只写 `transform / opacity / background-color`，不写 `transition: all`。
 - 原文段落开启 `content-visibility: auto`，离屏内容不参与布局和绘制；台词列表不用它，保证角色跳转落点稳定。
-- 旧的 `styles-additions.css` 已并入 `styles.css`，不再加载第二份覆盖样式。
+- 旧的 `styles-additions.css` 已并入 `styles.css`，原文件已移到回收站。
 
 
 ## 交互原则
