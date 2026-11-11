@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("shengkan", {
     defaults: () => ipcRenderer.invoke("ai:default-prompts"),
     detectChapters: (text, toc, workTitle) => ipcRenderer.invoke("ai:detect-chapters", text, toc, workTitle),
     cancel: () => ipcRenderer.invoke("ai:cancel-detect"),
+    listModels: (payload) => ipcRenderer.invoke("ai:list-models", payload),
     annotate: (lines, casts, startBatch, context) =>
       ipcRenderer.invoke("ai:annotate-lines", lines, casts, startBatch, context),
     extractCasts: (text, context) => ipcRenderer.invoke("ai:extract-casts", text, context),
@@ -37,6 +38,7 @@ contextBridge.exposeInMainWorld("shengkan", {
   log: {
     write: (scope, message, data) => ipcRenderer.send("log:write", scope, message, data),
     info: () => ipcRenderer.invoke("log:info"),
+    clear: () => ipcRenderer.invoke("log:clear"),
     open: () => ipcRenderer.invoke("log:open"),
   },
   shell: {

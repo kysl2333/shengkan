@@ -5,7 +5,7 @@ import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
 import { log } from "../log";
 import { askText, showAiDone } from "../prompt";
-import { castVoiceLabel, pushCastVoiceHistory, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
+import { castVoiceLabel, newCastId, pushCastVoiceHistory, type Project, type ProjectCast, type ProjectChapter, type ProjectLine, type ProjectAction } from "../projects";
 
 type View = "lines" | "source";
 type TaskState = "idle" | "running" | "done" | "checked";
@@ -94,10 +94,12 @@ export default function Studio({
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [editingSource, setEditingSource] = useState(false);
   const [sourceDraft, setSourceDraft] = useState("");
+  const [flashParagraph, setFlashParagraph] = useState(0);
   const [lineStatus, setLineStatus] = useState<Record<string, "generating" | "error" | "">>({});
   const [toast, setToast] = useState("");
   const [genDialog, setGenDialog] = useState(false);
   const [roleMenu, setRoleMenu] = useState(false);
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const annBatchRef = useRef(0);
   const genStopRef = useRef(false);
   const ranActionRef = useRef("");
@@ -129,6 +131,7 @@ export default function Studio({
     setEditing(null);
     setSpeakerFor(null);
     setLineMenu(null);
+    setFlashParagraph(0);
   }, [chapterId]);
 
   useEffect(() => {
@@ -176,6 +179,22 @@ export default function Studio({
   }, [lineMenu]);
 
   useEffect(() => {
+    if (!aiMenuOpen) return;
+    const close = () => setAiMenuOpen(false);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAiMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [aiMenuOpen]);
+
+  useEffect(() => {
     audioRef.current?.pause();
     setAudioPlaying(false);
   }, [current]);
@@ -186,6 +205,18 @@ export default function Studio({
 
   const selected = script.find((l) => l.id === current) ?? script[0];
   const selectedCast = castList.find((c) => c.name === selected?.speaker);
+
+  // 切到原文时，定位到当前台词所在段并短暂高亮。
+  useEffect(() => {
+    if (view !== "source" || !selected?.paragraph) return;
+    const el = document.getElementById(`source-p-${selected.paragraph}`);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    setFlashParagraph(selected.paragraph);
+    const timer = window.setTimeout(() => setFlashParagraph(0), 2000);
+    return () => window.clearTimeout(timer);
+  }, [view, selected?.paragraph]);
   const unknownCount = script.filter((l) => l.speaker === "未知").length;
   const pendingCount = script.filter(
     (l) => l.text.trim() && (l.status !== "done" || !l.audio)
@@ -363,7 +394,7 @@ export default function Studio({
 
   function newCast(name: string): ProjectCast {
     return {
-      id: `cast-${Date.now().toString(36)}`,
+      id: newCastId(),
       name,
       initial: name.slice(0, 1),
       desc: "待匹配音色",
@@ -1547,18 +1578,76 @@ export default function Studio({
         <span className="crumb">
           {script.reduce((a, l) => a + l.text.length, 0)} 字 · {script.length} 句 ·{" "}
           {script.filter((l) => l.status !== "done" || !l.audio).length} 句待生成
+          {unknownCount > 0 ? ` · ${unknownCount} 句待确认` : ""}
         </span>
         <div className="right">
           {checked.size > 0 && (
             <>
               <button className="btn small" onClick={generateChecked} disabled={genState === "generating"}>
-                生成勾选 ({checked.size})
+                生成勾选配音 ({checked.size})
               </button>
               <button className="btn small ghost" onClick={() => setChecked(new Set())}>
                 取消勾选
               </button>
             </>
           )}
+
+          <div className="ai-menu-wrap" onClick={(e) => e.stopPropagation()}>
+            <button
+              className={`btn small ai-trigger ${aiMenuOpen ? "open" : ""}`}
+              onClick={() => setAiMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={aiMenuOpen}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+                <path d="M8 12h8" />
+              </svg>
+              AI分析
+            </button>
+            {aiMenuOpen && (
+              <div className="ai-menu" role="menu">
+                <div className="ai-menu-head">
+                  <b>AI 分析</b>
+                  <span>先分析角色和说话人，再补未知台词</span>
+                </div>
+                <button
+                  role="menuitem"
+                  disabled={annotating}
+                  onClick={() => {
+                    setAiMenuOpen(false);
+                    void aiRebuildChapter();
+                  }}
+                >
+                  <b>AI 重拆本章</b>
+                  <span>台词 + 角色 + 情绪 + 语速</span>
+                </button>
+                <button
+                  role="menuitem"
+                  disabled={annotating}
+                  onClick={() => {
+                    setAiMenuOpen(false);
+                    void annotateWithAi();
+                  }}
+                >
+                  <b>AI 标注角色</b>
+                  <span>只改说话人、情绪、语速，不重拆句子</span>
+                </button>
+                <button
+                  role="menuitem"
+                  disabled={annotating || task === "running"}
+                  onClick={() => {
+                    setAiMenuOpen(false);
+                    void runSplit();
+                  }}
+                >
+                  <b>规则重拆</b>
+                  <span>只按引号和分段拆句，不调用 AI</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="seg" style={{ flex: "0 0 108px" }}>
             <button
               className={auditionMode === "single" ? "on" : ""}
@@ -1587,9 +1676,22 @@ export default function Studio({
                 : () => setGenDialog(true)
             }
           >
-            {genState === "generating" ? (cancelableGen ? "取消生成" : "生成中…") : "生成"}
+            {genState === "generating" ? (cancelableGen ? "取消生成" : "生成中…") : "生成配音"}
           </button>
         </div>
+      </div>
+
+      <div className="workflow-strip">
+        <span className="workflow-label">推荐流程</span>
+        <span className="workflow-step first">AI分析角色</span>
+        <span className="workflow-arrow">→</span>
+        <span className="workflow-step">补齐角色、指派未知台词</span>
+        <span className="workflow-arrow">→</span>
+        <span className="workflow-step">绑定音色</span>
+        <span className="workflow-arrow">→</span>
+        <span className="workflow-step">生成配音</span>
+        <span className="workflow-arrow">→</span>
+        <span className="workflow-step">成片导出</span>
       </div>
 
       <div className="studio-body">
@@ -1852,7 +1954,11 @@ export default function Studio({
                   .split(/\n\s*\n/)
                   .filter(Boolean)
                   .map((text, i) => (
-                    <div key={i} className="source-block">
+                    <div
+                      key={i}
+                      id={`source-p-${i + 1}`}
+                      className={`source-block ${flashParagraph === i + 1 ? "flash" : ""}`}
+                    >
                       <p>{text}</p>
                       <div className="source-meta">第 {i + 1} 段</div>
                     </div>
@@ -1912,6 +2018,39 @@ export default function Studio({
         </div>
 
         <aside className="rail-right">
+              {(annotating || aiMsg || aiProgress.total > 0) && (
+                <div className="right-block" id="taskBlock">
+                  <div className="right-title">
+                    <span className="section-label">AI 分析进度</span>
+                    <span className={`task-state ${annotating || task === "running" ? "running" : "done"}`}>
+                      {annotating ? "分析中" : task === "running" ? "进行中" : "就绪"}
+                    </span>
+                  </div>
+
+                  {aiMsg || aiProgress.total > 0 ? (
+                    <div className="tool-progress">
+                      {aiProgress.total > 0 && (
+                        <div className="task-bar" style={{ flex: 1 }}>
+                          <i style={{ width: `${Math.round((aiProgress.done / aiProgress.total) * 100)}%` }} />
+                        </div>
+                      )}
+                      <span>{aiMsg}</span>
+                    </div>
+                  ) : null}
+
+                  {logs.length > 0 && (
+                    <div className="task-log" style={{ maxHeight: 140 }}>
+                      {logs.map((l, i) => <div key={i}>{l}</div>)}
+                    </div>
+                  )}
+
+                  {annotating && (
+                    <button className="btn small" onClick={stopAi} style={{ width: "100%", marginTop: 8 }}>
+                      停止 AI 分析
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="right-block">
                 <div className="right-title">
                   <span className="section-label">当前台词</span>
@@ -2133,74 +2272,7 @@ export default function Studio({
                   )}
                 </div>
               </div>
-              <div className="right-block" id="taskBlock">
-                <div className="right-title">
-                  <span className="section-label">本章工具</span>
-                  <span className={`task-state ${task === "running" ? "running" : "done"}`}>
-                    {annotating ? "标注中" : task === "running" ? "进行中" : "就绪"}
-                  </span>
-                </div>
 
-                <div className="task-summary">
-                  <span className="dot ok" />
-                  <span>
-                    {script.length} 句 · {castList.length} 个角色
-                    {unknownCount > 0 ? ` · ${unknownCount} 句待确认` : ""}
-                  </span>
-                </div>
-
-                <p className="tool-help">
-                  整本操作在项目库右键「编辑整本」。
-                </p>
-
-                <details className="tool-menu">
-                  <summary>AI 拆分与标注</summary>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={aiRebuildChapter} disabled={annotating}>
-                      AI 重拆本章（台词 + 角色 + 情绪 + 语速）
-                    </button>
-                    <p>先规则拆句，再让 AI 识别角色、情绪和语速；会覆盖本章现有台词和音频标记。</p>
-                  </div>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={annotateWithAi} disabled={annotating}>
-                      AI 标注角色（不重拆台词）
-                    </button>
-                    <p>只改说话人、情绪、语速，不改变句子和已有音频。</p>
-                  </div>
-
-                  <div className="tool-option">
-                    <button className="btn small" onClick={runSplit} disabled={task === "running" || annotating}>
-                      规则重拆本章（只拆台词）
-                    </button>
-                    <p>只按引号和分段拆句，不调用 AI；认不准的说话人会标成「未知」。</p>
-                  </div>
-
-                  {annotating && (
-                    <button className="btn small" onClick={stopAi} style={{ width: "100%" }}>
-                      停止 AI
-                    </button>
-                  )}
-                </details>
-
-                {aiMsg || aiProgress.total > 0 ? (
-                  <div className="tool-progress">
-                    {aiProgress.total > 0 && (
-                      <div className="task-bar" style={{ flex: 1 }}>
-                        <i style={{ width: `${Math.round((aiProgress.done / aiProgress.total) * 100)}%` }} />
-                      </div>
-                    )}
-                    <span>{aiMsg}</span>
-                  </div>
-                ) : null}
-
-                {logs.length > 0 && (
-                  <div className="task-log" style={{ maxHeight: 140 }}>
-                    {logs.map((l, i) => <div key={i}>{l}</div>)}
-                  </div>
-                )}
-              </div>
 
         </aside>
       </div>
@@ -2229,7 +2301,7 @@ export default function Studio({
           <div className="modal gen-dialog">
             <div className="modal-head">
               <div>
-                <div className="modal-title">生成音频</div>
+                <div className="modal-title">生成配音</div>
                 <div className="modal-desc">
                   本章共 {allCount} 句，{pendingCount} 句待生成或改动过。
                 </div>
@@ -2238,7 +2310,7 @@ export default function Studio({
             </div>
             <div className="modal-body">
               <p className="tool-help" style={{ marginBottom: 12 }}>
-                生成音频：按角色绑定的音色调用云 TTS 或本地 IndexTTS，不会改台词。已有音频会保留上一版，可随时切换回退。
+                生成配音：按角色绑定的音色调用云 TTS 或本地 IndexTTS，不会改台词。已有音频会保留上一版，可随时切换回退。
               </p>
               <button
                 className="edit-option"

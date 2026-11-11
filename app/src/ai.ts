@@ -130,10 +130,27 @@ export async function setAiConfig(cfg: AiConfig): Promise<AiConfig> {
   return cfg;
 }
 
+export interface ModelListResult {
+  models: string[];
+  filtered: boolean;
+  total: number;
+}
+
 export async function testAi(): Promise<{ ok: boolean; ms: number; model: string; provider?: string }> {
   const b = bridge();
   if (b) return b.test();
   throw new Error("AI 配置只在桌面版可用");
+}
+
+export async function listModels(payload: {
+  baseUrl: string;
+  apiKey: string;
+  provider?: string;
+  kind: "text" | "tts";
+}): Promise<ModelListResult> {
+  const b = bridge();
+  if (b) return b.listModels(payload);
+  throw new Error("获取模型只在桌面版可用");
 }
 
 export async function getDefaultPrompts(): Promise<{ chapter: string; annotate: string }> {

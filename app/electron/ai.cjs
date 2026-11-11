@@ -342,21 +342,22 @@ async function detectChapters(text, onProgress, toc = [], workTitle = "") {
 const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给你一章已经拆好的台词，每句有 id、speaker、text。
 
 任务：
-1. 先通读整章台词，分析人物关系、称呼、语气和上下文，再判断每句说话人。
-2. 找出说话人标错或标成「未知」的句子，根据上下文判断真实说话人。
-3. speaker 只能从给定的角色列表里选，实在判断不了就保留「未知」。
-3. speaker 是「旁白」的句子是叙述文字，不要改成角色。
-4. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
-5. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
-6. 只把真正有台词的人物当角色。作者、插画、制作信息、目录、简介、出版社、译者、编辑、页码、数字不是角色。
-7. 不要把「她回」「他想」「江宁一愣」「声音里带」「江宁回过神」这类动作或叙述片段当角色名。
-8. 对话标记要同时支持：
+1. 先通读整章，分析人物关系、称呼、语气、场景和上下文，再判断每句的说话人。
+2. 只修改说话人标错或标成「未知」的句子；已经是「旁白」的叙述句不要改成角色。
+3. speaker 只能从给定的角色列表里选；实在判断不了就保留「未知」。
+4. 引号里的内容不自动等于台词。先看引号外的叙述框架：谁说、对谁说、在什么场景说。
+5. 不要因为引号内容里出现了某个角色名，就把这句话判给这个角色。名字出现在台词内容里，不等于说话人就是他。
+6. 电话、手机、对讲机、广播、电视、录音、新闻、扩音器、耳机里的声音，如果叙述没有明确指出说话人，标为「未知」，不要归给段落主角、旁白或某个在场角色。能确认身份时用身份名，例如「警察」「播音员」「店员」。
+7. 如果一句话只是叙述中夹带的引号、术语、书名、招牌、短信内容、歌词或台词片段，不是独立说话，speaker 改成「旁白」；拿不准时保留「未知」或「旁白」，不要硬塞给某个角色。
+8. 同一段叙述里既有旁白又有引号内容时，只有真正独立的说话句才标角色；不要把整段都标成同一个角色。
+9. 对话标记要同时支持：
    - 中文：说、道、问、答、喊、叫、笑道、低声、开口、回答、补充、嘀咕、嘟囔；引号 “”、『』、「」、""。
    - 英文：said、asked、replied、answered、whispered、shouted、muttered、added；引号 ""、''。
    - 日文：言った、聞いた、答えた、叫んだ、呟いた、笑った；引号 「」、『』。
-9. 中文引号里的对话，如果前后没有「某某说」，根据称呼、语气和上下文判断说话人；判断不了就保留「未知」。
-10. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
-11. 只返回需要修改的句子，不要返回全部。
+10. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
+11. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
+12. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
+13. 只返回需要修改的句子，不要返回全部。
 
 只返回 JSON，不要解释：
 {"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
@@ -438,18 +439,20 @@ const CAST_PROMPT = `你是小说角色分析器。读下面这段原文，列�
 规则：
 1. 先通读全文，分析人物关系、称呼和对话标记，再列出真正有台词的人物。
 2. 只列人物。作者、插画、制作信息、目录、简介、出版社、译者、编辑、页码、数字、旁白都不是角色。
-2. 不要把叙述中的句子片段当人名。以下都不是名字：「她回」「他想」「江宁一愣」「声音里带」「江宁回过神」「他忽然」「妈妈在二楼」。
-3. 角色名应该是 2-6 个汉字（日式长名可以到 6 个），或首字母大写的英文名；不要带动作、副词、语气词、标点或整句话。
-4. 同一人物只出现一次，用原文中最常用的称呼。
-5. 对话标记要同时支持：
+3. 不要把叙述中的句子片段当人名。以下都不是名字：「她回」「他想」「江宁一愣」「声音里带」「江宁回过神」「他忽然」「妈妈在二楼」。
+4. 角色名应该是 2-6 个汉字（日式长名可以到 6 个），或首字母大写的英文名；不要带动作、副词、语气词、标点或整句话。
+5. 引号里的内容不自动等于台词。不要因为引号里出现某个名字，就把这个名字列为说话角色；只有引号外的叙述能支持他在说话，才算有台词。
+6. 电话、手机、对讲机、广播、电视、录音、新闻里的声音，如果没有明确人物，不要硬套在场角色；可以列成「警察」「播音员」这类身份名，或直接省略。
+7. 同一人物只出现一次，用原文中最常用的称呼。
+8. 对话标记要同时支持：
    - 中文：说、道、问、答、喊、叫、笑道、低声、开口、回答、补充、嘀咕、嘟囔；引号 “”、『』、「」、""。
    - 英文：said、asked、replied、answered、whispered、shouted、muttered、added；引号 ""、''。
    - 日文：言った、聞いた、答えた、叫んだ、呟いた、笑った；引号 「」、『』。
-6. 没有名字但有台词的人物，用「OL女性」「店员」「路人男生」这类身份描述，不要编造人名。
-7. 没有「某某说」的对话，根据称呼、语气和上下文推断说话人；同一段连续对话尽量归给在场人物。
-7. gender 只能是：男、女、未知；age 只能是：少年、青年、中年、老年、未知；desc 不超过 12 个字。
-8. 没有可识别角色就返回空数组。
-9. 如果用户给了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不要把其他作品的角色混进来。
+9. 没有名字但有台词的人物，用「OL女性」「店员」「路人男生」这类身份描述，不要编造人名。
+10. 没有「某某说」的对话，根据称呼、语气和上下文推断说话人；同一段连续对话尽量归给在场人物，拿不准就不要列。
+11. gender 只能是：男、女、未知；age 只能是：少年、青年、中年、老年、未知；desc 不超过 12 个字。
+12. 没有可识别角色就返回空数组。
+13. 如果用户给了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不要把其他作品的角色混进来。
 
 只返回 JSON，不要解释：
 {"casts":[{"name":"堀北","gender":"女","age":"青年","desc":"冷静强势"}]}`;
@@ -580,6 +583,69 @@ function defaultPrompts() {
   return { chapter: SYSTEM_PROMPT, annotate: ANNOTATE_PROMPT };
 }
 
+const TTS_MODEL_RE = /(tts|speech|voice|cosyvoice|sambert)/i;
+
+async function listModels({ baseUrl, apiKey, provider = "custom", kind = "text" } = {}) {
+  const base = String(baseUrl || "").trim().replace(/\/+$/, "");
+  if (!base) throw new Error("先填写服务地址");
+  const key = String(apiKey || "").trim();
+  const headers =
+    provider === "mimo"
+      ? key
+        ? { "api-key": key }
+        : {}
+      : key
+        ? { Authorization: `Bearer ${key}` }
+        : {};
+  const urls = [`${base}/models`];
+  if (!/\/v1$/i.test(base)) urls.push(`${base}/v1/models`);
+  if (provider === "qwen" && !/compatible-mode/i.test(base)) {
+    urls.push(`${base}/compatible-mode/v1/models`);
+  }
+
+  let lastError = "";
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(20000),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        lastError = `HTTP ${res.status}：${text.slice(0, 120)}`;
+        continue;
+      }
+      const data = JSON.parse(text);
+      const raw =
+        data.data ||
+        data.models ||
+        data.output?.models ||
+        data.result?.models ||
+        [];
+      const ids = [...new Set(
+        (Array.isArray(raw) ? raw : [])
+          .map((m) => (typeof m === "string" ? m : m?.id || m?.name || m?.model))
+          .filter(Boolean)
+      )];
+      if (!ids.length) {
+        lastError = "接口没有返回模型";
+        continue;
+      }
+      const tts = ids.filter((id) => TTS_MODEL_RE.test(id));
+      const textModels = ids.filter((id) => !TTS_MODEL_RE.test(id));
+      const models = kind === "tts" ? (tts.length ? tts : ids) : (textModels.length ? textModels : ids);
+      return {
+        models,
+        filtered: models.length !== ids.length,
+        total: ids.length,
+      };
+    } catch (e) {
+      lastError = e.message;
+    }
+  }
+  throw new Error(`获取模型失败：${lastError || "没有可用接口"}`);
+}
+
 module.exports = {
   readAiConfig,
   writeAiConfig,
@@ -590,5 +656,6 @@ module.exports = {
   suggestVoice,
   testConnection,
   defaultPrompts,
+  listModels,
   configFile,
 };

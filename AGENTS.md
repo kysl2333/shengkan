@@ -158,6 +158,13 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 删除台词、删除章节、重新拆分或整本重拆时，用 `/v1/audio-delete` 清掉被替换的旧 wav。
 - **生成前不要删除当前音频**。生成成功后由 `nextAudio` 把当前版本推进历史，再淘汰最旧版本；生成失败必须保留旧音频。
 - 所有 MCP 修改写 `mcp/data/audit.jsonl`。
+- 角色 id 一律用 `newCastId()`，不要用 `Date.now()` 拼；加载旧项目时 `normalizeProject` 会去重重复 id。
+- 文本 AI 和 TTS AI 分开：`ai.provider/baseUrl/model/apiKey` 只给文本；MiMo/Qwen/自定义 TTS 各自配置。模型列表走 `ai:list-models`，文本和 TTS 按模型名过滤，分不清时显示全部。
+- 工作台的 AI 工具只在顶栏「AI分析」二级菜单里；右栏只在分析进行时显示进度/日志。不要把它们再埋回右栏底部。
+- 规则拆分遇到句首或句中的短引号，如果后面接「的/地/得/，」继续同一句话，保留在旁白里；电话/对讲机/广播里的引号没有明确说话人时标「未知」。
+- 角色标注提示词不能鼓励「根据引号里的名字判断说话人」；名字出现在引号内容里不等于说话人。
+- MCP 权限用 `SHENGKAN_MCP_PERMISSION=read|edit|generate|full`，默认 `generate`；写操作和生成在 server 内还有第二道限制。
+- 开发日志 5 MB 轮转、保留 1 份备份；不要在 UI 里假装日志无限增长。
 - 云音色通过 `ProjectCast.cloudModel/cloudVoice/cloudName` 绑定；绑定本地音色时必须清空这三个字段。
 - 小米云 TTS 用 `mimo-v2.5-tts`（预置）、`mimo-v2.5-tts-voicedesign`（设计）、`mimo-v2.5-tts-voiceclone`（克隆）。
 - 千问 TTS 走 DashScope 原生 `multimodal-generation`，model 用 `qwen:` 前缀；自定义 TTS 走 OpenAI 兼容 `/audio/speech`，model 用 `custom:` 前缀。

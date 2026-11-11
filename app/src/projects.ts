@@ -120,8 +120,17 @@ export function normalizeSpeed(value: unknown) {
 }
 
 function normalizeProject(project: Project): Project {
+  const seenCastIds = new Set<string>();
+  const casts = (project.casts ?? []).map((cast, index) => {
+    const base = cast.id || `cast-${index + 1}`;
+    const id = seenCastIds.has(base) ? `${base}-${index + 1}` : base;
+    seenCastIds.add(id);
+    return { ...cast, id };
+  });
+
   return {
     ...project,
+    casts,
     chapters: (project.chapters ?? []).map((chapter) => ({
       ...chapter,
       lines: (chapter.lines ?? []).map((line) => ({
@@ -130,6 +139,13 @@ function normalizeProject(project: Project): Project {
       })),
     })),
   };
+}
+
+export function newCastId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `cast-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `cast-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
 interface ProjectsBridge {
@@ -158,6 +174,12 @@ declare global {
         get: () => Promise<import("./ai").AiConfig>;
         set: (cfg: import("./ai").AiConfig) => Promise<import("./ai").AiConfig>;
         test: () => Promise<{ ok: boolean; ms: number; model: string; provider?: string }>;
+        listModels: (payload: {
+          baseUrl: string;
+          apiKey: string;
+          provider?: string;
+          kind: "text" | "tts";
+        }) => Promise<import("./ai").ModelListResult>;
         defaults: () => Promise<{ chapter: string; annotate: string }>;
         detectChapters: (text: string, toc?: string[], workTitle?: string) => Promise<import("./ai").AiChapterResult>;
         cancel: () => Promise<boolean>;
@@ -172,7 +194,8 @@ declare global {
       };
       log: {
         write: (scope: string, message: string, data?: unknown) => void;
-        info: () => Promise<{ file: string; size: number }>;
+        info: () => Promise<import("./log").LogInfo>;
+        clear: () => Promise<{ ok: boolean; freed: number; info: import("./log").LogInfo }>;
         open: () => Promise<string>;
       };
       shell: {

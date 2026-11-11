@@ -203,35 +203,98 @@ class SplitRequest(BaseModel):
     max_chars: int = 150
 
 
-QUOTE_RE = re.compile(r"“([^”]+)”")
-NAME_RE = re.compile(r"([\u4e00-\u9fa5]{2,4})(?:说|道|问|答|喊|笑)")
+QUOTE_RE = re.compile(r"“([^”]*)”|「([^」]*)」|『([^』]*)』|\"([^\"]*)\"")
+SPEECH_VERB = r"说|道|问|答|喊|叫|笑道|低声|开口|回答|补充|嘀咕|嘟囔"
+NAME_BEFORE_RE = re.compile(rf"([\u4e00-\u9fa5]{{2,4}})\s*(?:{SPEECH_VERB})\s*[：:]?\s*$")
+NAME_COLON_RE = re.compile(r"([\u4e00-\u9fa5]{2,4})\s*[：:]\s*$")
+NAME_AFTER_RE = re.compile(rf"^([\u4e00-\u9fa5]{{2,4}})\s*(?:{SPEECH_VERB})")
+BAD_NAMES = {
+    "他", "她", "它", "我", "你", "您", "我们", "他们", "她们", "这个", "那个",
+    "什么", "自己", "旁白", "未知", "声音", "时候", "地方", "东西",
+}
+BAD_START = set("他她它我你您咱这那其此谁每各某有没不别要会能可是在把被让给对从到跟与为以而但却并且或者所因虽如若由忽突又还也都就才只很太更最再已曾正刚快慢轻重低大小多少好坏看听想说问答喊笑走跑站坐躺拿放伸转抬压装帮替叫变完起停回过出进上下拉来去声音话语心眼嘴脸头身口脚日月天年时分秒含随神先见作后面人己哑指一道")
+BAD_END = set("的了着得地过来去下上里外中前后边旁处时候刻然么呢吧啊呀哦嗯声音话语心眼嘴脸头身口脚笔神住惑愣瞪愿笑道问喊回走站坐看听想起开关停成变完掉好坏快慢轻重高低大小多少一二三四五六七八九十百千万两几个位名条只件张次遍点分秒天年月日时主茬步先带装跟含随他她它我你您咱们没又就苦洞解吼常台")
 
 
-def split_block(block: str):
+def is_name_shape(name: str) -> bool:
+    if not name or not re.fullmatch(r"[\u4e00-\u9fa5]{2,4}", name):
+        return False
+    if name in BAD_NAMES:
+        return False
+    if name[0] in BAD_START or name[-1] in BAD_END:
+        return False
+    if name[0] == name[1]:
+        return False
+    return True
+
+
+def name_before(text: str):
+    flat = text.replace("\n", "")[-30:]
+    m = NAME_BEFORE_RE.search(flat)
+    if m and is_name_shape(m.group(1)):
+        return m.group(1)
+    m = NAME_COLON_RE.search(flat)
+    if m and is_name_shape(m.group(1)):
+        return m.group(1)
+    return ""
+
+
+def name_after(text: str):
+    head = re.sub(r"^[\s，,。；;：:、]+", "", text)
+    m = NAME_AFTER_RE.match(head)
+    if m and is_name_shape(m.group(1)):
+        return m.group(1)
+    m = re.match(r"^([\u4e00-\u9fa5]{2,4})\s*[：:]", head)
+    if m and is_name_shape(m.group(1)):
+        return m.group(1)
+    return ""
+
+
+def split_block(block: str, paragraph: int = 1):
     segments = []
     pos = 0
     for m in QUOTE_RE.finditer(block):
-        before = block[pos:m.start()].strip(" ，。；\n\t")
-        if before:
-            segments.append({"speaker": "旁白", "text": before, "emotion": "平静", "confidence": 0.95})
-
-        quote = m.group(1).strip()
-        after = block[m.end():m.end() + 24]
-        name = NAME_RE.search(after) or NAME_RE.search(before[-24:])
-        speaker = name.group(1) if name else "未知"
-        segments.append(
-            {
-                "speaker": speaker,
-                "text": quote,
-                "emotion": "平静",
-                "confidence": 0.9 if name else 0.55,
-            }
+        quote = next((g for g in m.groups() if g is not None), "").strip()
+        before = block[pos:m.start()]
+        after = block[m.end():]
+        b = before.strip()
+        a = after.strip()
+        a_head = re.sub(r"^[，,。；;：:、]+", "", a)
+        speech = bool(re.search(rf"(?:{SPEECH_VERB})\s*[，,：:]?\s*$", b)) or bool(
+            re.match(rf"^[\u4e00-\u9fa5]{{2,4}}\s*(?:{SPEECH_VERB})", a_head)
+        ) or bool(re.match(rf"^[他她它我你您]\s*(?:{SPEECH_VERB})", a_head))
+        ends = bool(re.search(r"[。！？!?…]$", b))
+        continues = bool(re.match(r"^[的之者等地得，,、；;：:）)】\]》」』]", a))
+        inline = (not speech) and bool(quote) and (
+            (not b and continues) or (bool(b) and len(quote) <= 20 and not ends)
         )
+        if inline:
+            continue
+
+        before_text = b.strip(" ，。；\n\t")
+        if before_text:
+            segments.append(
+                {"speaker": "旁白", "text": before_text, "emotion": "平静", "confidence": 0.95, "paragraph": paragraph}
+            )
+
+        speaker = name_before(before) or name_after(after) or "未知"
+        if quote:
+            segments.append(
+                {
+                    "speaker": speaker,
+                    "text": quote,
+                    "emotion": "平静",
+                    "confidence": 0.9 if speaker != "未知" else 0.45,
+                    "paragraph": paragraph,
+                }
+            )
         pos = m.end()
 
     rest = block[pos:].strip(" ，。；\n\t")
     if rest:
-        segments.append({"speaker": "旁白", "text": rest, "emotion": "平静", "confidence": 0.95})
+        segments.append(
+            {"speaker": "旁白", "text": rest, "emotion": "平静", "confidence": 0.95, "paragraph": paragraph}
+        )
     return segments
 
 
@@ -242,11 +305,11 @@ def split(req: SplitRequest):
         return {"segments": [], "count": 0}
 
     segments = []
-    for block in re.split(r"\n\s*\n", text):
+    for paragraph, block in enumerate(re.split(r"\n\s*\n", text), 1):
         block = block.strip()
         if not block:
             continue
-        segments.extend(split_block(block))
+        segments.extend(split_block(block, paragraph))
 
     return {
         "segments": segments,

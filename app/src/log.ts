@@ -1,6 +1,16 @@
 export interface LogInfo {
   file: string;
   size: number;
+  backupSize?: number;
+  totalSize?: number;
+  maxSize?: number;
+  keepBackups?: number;
+}
+
+export interface LogClearResult {
+  ok: boolean;
+  freed: number;
+  info: LogInfo;
 }
 
 function bridge() {
@@ -14,6 +24,10 @@ export function log(scope: string, message: string, data?: unknown) {
 
 export async function logInfo(): Promise<LogInfo | null> {
   return bridge()?.info() ?? null;
+}
+
+export async function clearLog(): Promise<LogClearResult | null> {
+  return bridge()?.clear() ?? null;
 }
 
 export async function openLog(): Promise<string | null> {

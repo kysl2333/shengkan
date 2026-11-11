@@ -104,14 +104,14 @@ export default function TopBar({
           if (!alive) return;
           setEngine({
             online: Boolean(h.ok),
-            model: h.model_loaded,
+            model: Boolean(h.ok && h.model_loaded),
             gpu: h.gpu
               ? `${h.gpu.used_gb ?? Math.max(0, h.gpu.total_gb - h.gpu.free_gb)}/${h.gpu.total_gb} GB`
               : "",
           });
         })
         .catch(() => {
-          if (alive) setEngine((prev) => ({ ...prev, online: false }));
+          if (alive) setEngine({ online: false, model: false, gpu: "" });
         });
     };
     check();

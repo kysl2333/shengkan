@@ -14,19 +14,40 @@ MCP 走 stdio，不需要端口。引擎地址默认 `http://127.0.0.1:8290`，�
 
 ## 工具
 
-| 工具 | 作用 |
-|---|---|
-| `list_projects` | 列出活动项目，可选包含回收站 |
-| `read_project` | 读项目标题、章节、角色 |
-| `read_lines` | 读某一章全部台词 |
-| `update_line` | 改台词、角色、情绪、语速，写审计 |
-| `split_chapter` | 调引擎拆原文，只返回结果不写入 |
-| `generate_line` | 调 IndexTTS 为某句生成音频 |
-| `get_audit` | 查看最近 AI 操作 |
+| 工具 | 作用 | 最低权限 |
+|---|---|---|
+| `list_projects` | 列出活动项目，可选包含回收站 | read（回收站 full） |
+| `read_project` | 读项目标题、章节、角色 | read |
+| `read_lines` | 读某一章全部台词 | read |
+| `update_line` | 改台词、角色、情绪、语速，写审计 | edit |
+| `split_chapter` | 调引擎拆原文，只返回结果不写入 | edit |
+| `generate_line` | 调 IndexTTS 为某句生成音频 | generate |
+| `get_audit` | 查看最近 AI 操作 | read |
+| `get_permissions` | 查看当前权限和可用工具 | read |
 
 `update_line` 会把句子标成 `dirty`，软件里只重生成改动过的句子。
 `generate_line` 会把上一版音频推进 `audioHistory`，最多保留 2 个版本。
-`list_projects` 默认只列 `projects/` 下的活动项目；项目在回收站时加 `includeTrash: true` 才能看到。
+`list_projects` 默认只列 `projects/` 下的活动项目；项目在回收站时加 `includeTrash: true`，并且需要 `full` 权限。
+
+## 权限
+
+通过环境变量 `SHENGKAN_MCP_PERMISSION` 控制，默认 `generate`：
+
+| 级别 | 能做什么 |
+|---|---|
+| `read` | 列项目、读项目、读台词、查审计 |
+| `edit` | 只读 + 修改台词/角色/情绪/语速 + 拆句预览 |
+| `generate` | 可改 + 调 TTS 生成音频（默认） |
+| `full` | 可生成 + 查看回收站项目列表 |
+
+启动前设置，例如只读：
+
+```powershell
+$env:SHENGKAN_MCP_PERMISSION = "read"
+node server.mjs
+```
+
+MCP 客户端仍然决定要不要调用某个工具；声栞这一侧再按级别做第二道限制。用 `get_permissions` 可以在会话里直接确认当前级别。
 
 ## Claude Desktop
 
@@ -69,9 +90,10 @@ MCP 走 stdio，不需要端口。引擎地址默认 `http://127.0.0.1:8290`，�
 
 ## 安全
 
-- 读取 `projects/<目录>/project.json`；项目在 `projects/.trash/` 时默认不可读，需要先在应用回收站还原。
-- 每次修改写 `mcp/data/audit.jsonl`，软件设置页可回滚。
-- `generate_line` 会占用显存，建议在软件里把权限设为「可改台词和角色」时不要开放生成。
+- 读取 `projects/<目录>/project.json`；项目在 `projects/.trash/` 时默认不可读，需要 `full` 权限才能列出回收站摘要。
+- 每次修改写 `mcp/data/audit.jsonl`，软件设置页可查看。
+- 权限由 `SHENGKAN_MCP_PERMISSION` 控制，默认 `generate`；只想校对文本时用 `edit`，只读时用 `read`。
+- `generate_line` 会占用显存，建议在不需要生成时用 `edit` 或 `read` 启动。
 - 不要把 API Key 写进 MCP 配置或仓库；MiMo Key 只在 `%APPDATA%/shengkan/ai.json`。
 
 ## 排错：OpenCode 里 MCP 显示红点

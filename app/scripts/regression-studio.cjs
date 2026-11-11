@@ -8,6 +8,9 @@
  * 3. 只剩一句时拒绝删除，且不先删音频
  * 4. 生成期间改其他台词，生成结束不覆盖改动
  * 5. AI 重拆本章时清理被替换台词的旧音频
+ * 6. 语速拖动只在松手后落盘
+ * 7. 重复角色 id 只选中一个，绑定只作用于一个角色
+ * 8. 选中台词切原文会定位并高亮对应段
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -26,17 +29,17 @@ const project = {
   updatedAt: "2026-11-11T00:00:00.000Z",
   settings: { engine: "http://127.0.0.1:8290" },
   casts: [
-    { id: "cast-1", name: "旁白", initial: "旁", desc: "待匹配音色", voice: "", voicePath: "", color: "#2f6b57" },
-    { id: "cast-2", name: "沈砚", initial: "沈", desc: "待匹配音色", voice: "", voicePath: "", color: "#a9763c" },
+    { id: "cast-dup", name: "旁白", initial: "旁", desc: "待匹配音色", voice: "", voicePath: "", color: "#2f6b57" },
+    { id: "cast-dup", name: "沈砚", initial: "沈", desc: "待匹配音色", voice: "", voicePath: "", color: "#a9763c" },
   ],
   chapters: [
     {
       id: "ch-01",
       title: "第一章",
-      source: "第一句\n第二句",
+      source: "第一句\n\n第二句",
       lines: [
-        { id: 1, speaker: "旁白", text: "第一句", emotion: "平静", speed: 1, status: "pending", audio: "" },
-        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "pending", audio: "" },
+        { id: 1, speaker: "旁白", text: "第一句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 1 },
+        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 2 },
       ],
     },
     {
@@ -44,7 +47,7 @@ const project = {
       title: "第二章",
       source: "只有一句",
       lines: [
-        { id: 1, speaker: "沈砚", text: "只有一句", emotion: "平静", speed: 1, status: "done", audio: "keep-me.wav" },
+        { id: 1, speaker: "沈砚", text: "只有一句", emotion: "平静", speed: 1, status: "done", audio: "keep-me.wav", paragraph: 1 },
       ],
     },
   ],
@@ -253,11 +256,11 @@ app.whenReady().then(async () => {
   await reload(win);
   await clickChapter(win, "第二章");
   await wait(200);
-  await evalJs(win, `document.querySelector('.tool-menu summary')?.click()`);
-  await wait(100);
+  await evalJs(win, `document.querySelector('.ai-trigger')?.click()`);
+  await wait(150);
   const aiRebuildClicked = await evalJs(
     win,
-    `(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes('AI 重拆本章')); if (!b) return false; b.click(); return true; })()`
+    `(() => { const b = [...document.querySelectorAll('.ai-menu button')].find(x => x.textContent.includes('AI 重拆本章')); if (!b) return false; b.click(); return true; })()`
   );
   await wait(800);
   const aiDeletes = await evalJs(win, `window.__fetchLog.audioDeletes`);
@@ -284,6 +287,40 @@ app.whenReady().then(async () => {
   await wait(500);
   const speedPersisted = savedProjects.some((p) => p.chapters[0].lines[0].speed === 1.25);
   check("语速拖动只在松手后落盘", duringDragSaves === 0 && speedPersisted, `during=${duringDragSaves} persisted=${speedPersisted}`);
+
+  // 8. 重复角色 id 会被去重，绑定只作用于一个角色
+  await reload(win);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.nav button')].find(x => x.textContent.includes('角色与音色')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(800);
+  const currentCount = await evalJs(win, `document.querySelectorAll('.role-current').length`);
+  const bindClicked = await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.voice-card .voice-use')].find(x => x.textContent.includes('绑定到角色')); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(500);
+  const voiceBoundCount = await evalJs(
+    win,
+    `[...document.querySelectorAll('.role-trait')].filter(x => x.textContent.includes('沉静旁白')).length`
+  );
+  check("重复角色 id 只选中一个", currentCount === 1, `current=${currentCount}`);
+  check("绑定只作用于一个角色", bindClicked === true && voiceBoundCount === 1, `bound=${voiceBoundCount}`);
+
+  // 9. 选中台词后切原文，定位并高亮对应段
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(200);
+  await evalJs(win, `document.querySelectorAll('.line')[1].click()`);
+  await wait(150);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.view-switch button')].find(x => x.textContent.includes('原文')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(500);
+  const flash = await evalJs(win, `document.querySelector('#source-p-2')?.classList.contains('flash')`);
+  check("原文定位并高亮当前段", flash === true, `flash=${flash}`);
 
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\nRESULT ${failed === 0 ? "GREEN" : "RED"} ${results.length - failed}/${results.length}`);

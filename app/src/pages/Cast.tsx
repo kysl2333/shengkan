@@ -16,7 +16,7 @@ import {
 import { isRealCharacter } from "../import";
 import { log } from "../log";
 import { askText, askVoiceEdit } from "../prompt";
-import { castVoiceLabel, pushCastVoiceHistory, type Project } from "../projects";
+import { castVoiceLabel, newCastId, pushCastVoiceHistory, type Project } from "../projects";
 
 function VoiceWave() {
   const bars = useMemo(
@@ -575,7 +575,7 @@ export default function Cast({
       return;
     }
     const cast = {
-      id: `cast-${Date.now().toString(36)}`,
+      id: newCastId(),
       name,
       initial: name.slice(0, 1),
       desc: "待匹配音色",

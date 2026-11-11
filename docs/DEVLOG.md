@@ -1,5 +1,49 @@
 # 开发记录
 
+## 2026-11-11 · 工作台流程、AI/TTS 拆分和绑定修复
+
+### 根因
+
+- 角色 id 用 `Date.now().toString(36)`，同一毫秒创建两个角色会得到同一个 id；`selected?.id === c.id` 让两个角色同时显示「当前」，`bindLocalToSelected` 按 id 匹配，绑定一个就改了两个
+- AI 工具埋在右栏最底部，用户找不到；「生成」和「AI 拆分」的命名也没有区分「文本分析」和「配音」
+- 文本 AI 与 TTS AI 混在同一组配置里；模型只能手填
+- Node Gradio 代理的 `/health` 固定返回 `model_loaded: true`；远端断开时顶栏仍显示「已加载」
+- 规则拆分只按「引号长度 ≤20 + 前面不是句号」判断内联引号，句首的 `"blessing software" 的成员` 会被拆成台词；AI 提示词又鼓励「根据引号里的名字判断说话人」，把对讲机里的加藤惠判给了加藤惠
+- 原文视图没有把当前台词段落滚到视野里
+- MCP 只在文档里写「客户端控制权限」，代码没有任何限制
+- 日志轮转直接用 `rename` 覆盖 `.1`，Windows 上可能失败；设置页也没有大小和清理入口
+
+### 完成
+
+- 新增 `newCastId()`，加载项目时按 id 去重；回归测试覆盖「重复 id 只选中一个」「绑定只作用于一个角色」
+- 工作台顶栏新增「AI分析」菜单，集中 AI 重拆、AI 标注、规则重拆；新增流程条；「生成」改名「生成配音」
+- AI 进度/日志只在分析中显示，并移到右栏顶部
+- 设置页 AI 服务拆成「文本 AI / TTS AI」；新增 `ai:list-models` IPC，支持 MiMo/千问/自定义；文本和 TTS 按名字过滤，分不清就全部显示
+- 语音引擎改为「TTS 地址 / API」优先，本机 Python 收进高级折叠项
+- Node `/health` 先检查远端 `/config` 可达性，再决定 `ok/model_loaded`；TopBar 失败时清掉 model
+- 规则拆分增加「后接 的/地/得/，继续同一句」的内联引号判断；Python 拆分同步
+- 重写角色标注/角色提取提示词：引号内名字不等于说话人，设备声音、叙述中的术语、拿不准保留未知
+- 原文视图按台词 `paragraph` 定位并高亮；角色页重复 id 去重
+- MCP 增加 `SHENGKAN_MCP_PERMISSION` 四档权限和 `get_permissions`；写/生成操作做第二道限制
+- 日志 5MB 轮转 + 1 份备份 + 设置页清空
+
+### 验证
+
+- `npm.cmd run check:studio` 12/12
+- 规则拆分样例：`"blessing software" 的成员。` 保持旁白；对讲机引号 speaker 为「未知」；`“你好。”他说。` 仍是独立台词
+- 模型接口 mock：文本返回 `mimo-v2.6-flash/deepseek-chat`，TTS 返回 `mimo-v2.5-tts/gpt-4o-mini-tts`
+- MCP `read` 权限启动，`tools/list` 正常；`get_permissions` 可见
+- 日志临时 userData 下 6MB 触发轮转，`.1` 存在；清空释放 6291501 字节
+- `node --check` 四个文件、`python -m py_compile` 通过
+
+### 坑
+
+- 同一个 React key/id 被两个角色共用时，所有按 id 的绑定、选中、删除都会双写；以后新增角色一律走 `newCastId`
+- 拆分器不能只看引号长度；要看引号后是否还有「的/地/得/，」把句子接下去
+- AI 提示词里「引号里的对话」这句话容易被模型理解成「引号里的名字是说话人」；必须明确写“名字在引号里不代表说话人”
+- 模型列表接口返回的 `data` 可能是数组、对象或 `output.models`，不能只读一种
+- 顶栏状态不要用“上一次成功”的 model 值；连接失败时要把 online/model/gpu 一起清掉
+
 ## 2026-11-11 · 浅色编辑室与双主题
 
 ### 设计决策

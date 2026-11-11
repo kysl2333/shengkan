@@ -24,6 +24,7 @@ ipcMain.handle("ai:config:set", (_event, cfg) => ai.writeAiConfig(cfg));
 ipcMain.handle("ai:test", () => ai.testConnection());
 ipcMain.handle("ai:default-prompts", () => ai.defaultPrompts());
 ipcMain.handle("ai:cancel-detect", () => ai.cancelDetect());
+ipcMain.handle("ai:list-models", (_event, payload) => ai.listModels(payload));
 ipcMain.handle("ai:detect-chapters", (event, text, toc, workTitle) =>
   ai.detectChapters(
     text,
@@ -60,6 +61,7 @@ ipcMain.handle("cloud:remove", (_event, id) => cloud.remove(id));
 ipcMain.handle("cloud:update", (_event, id, payload) => cloud.update(id, payload));
 ipcMain.on("log:write", (_event, scope, message, data) => logs.write(scope, message, data));
 ipcMain.handle("log:info", () => logs.info());
+ipcMain.handle("log:clear", () => logs.clear());
 ipcMain.handle("log:open", () => logs.open());
 ipcMain.handle("shell:reveal", (_event, file) => {
   if (!file || !fs.existsSync(file)) throw new Error(`文件不存在：${file}`);

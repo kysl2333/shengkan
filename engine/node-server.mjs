@@ -371,7 +371,7 @@ function nameBefore(text) {
 }
 
 function nameAfter(text) {
-  const head = text.replace(/^[\s]+/, "");
+  const head = text.replace(/^[\s，,。；;：:、]+/, "");
   const re = new RegExp(`^([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})`);
   const m = head.match(re);
   if (m && isNameShape(m[1])) return { name: m[1], length: m[0].length };
@@ -401,15 +401,26 @@ function splitText(text) {
       const after = block.slice(m.index + m[0].length);
       const trimmedBefore = before.trim();
       const trimmedAfter = after.trim();
+      const afterHead = trimmedAfter.replace(/^[，,。；;：:、]+/, "");
       const speechMarker =
         new RegExp(`(?:${SPEECH_VERB})\\s*[，,：:]?\\s*$`).test(trimmedBefore) ||
-        new RegExp(`^([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})`).test(trimmedAfter);
-      const embedded =
+        new RegExp(`^([\\u4e00-\\u9fa5]{2,4})\\s*(?:${SPEECH_VERB})`).test(afterHead) ||
+        new RegExp(`^[他她它我你您]\\s*(?:${SPEECH_VERB})`).test(afterHead);
+      const endsSentence = /[。！？!?…]$/.test(trimmedBefore);
+      const continuesAfter = /^[的之者等地得，,、；;：:）)】\]》」』]/.test(trimmedAfter);
+      // 引号只是句子里的术语/书名/招牌，或者后面还有“的/地/得/，”继续同一句话时，不拆成台词。
+      const inlineQuote =
+        !speechMarker &&
+        quote.length > 0 &&
+        ((trimmedBefore === "" && continuesAfter) ||
+          (trimmedBefore !== "" && quote.length <= 20 && !endsSentence));
+      const embedded = inlineQuote || (
         trimmedBefore !== "" &&
         !speechMarker &&
         quote.length > 0 &&
         quote.length <= 20 &&
-        !/[。！？!?…]$/.test(trimmedBefore);
+        !endsSentence
+      );
       if (embedded) continue;
 
       const beforeName = nameBefore(before);
@@ -538,14 +549,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/health") {
-      let spec = null;
+      let reachable = false;
       try {
-        spec = await discoverApi();
+        const r = await fetch(`${GRADIO}/config`, { signal: AbortSignal.timeout(4000) });
+        reachable = r.ok;
       } catch {
         /* 远端暂时不可达 */
       }
+      let spec = apiSpec;
+      if (reachable && !spec) {
+        try {
+          spec = await discoverApi(true);
+        } catch {
+          spec = null;
+        }
+      }
       return json(res, {
-        ok: true,
+        ok: reachable,
         engine: "node-gradio-proxy",
         mode: "gradio",
         gradio: GRADIO,
@@ -553,7 +573,7 @@ const server = http.createServer(async (req, res) => {
         inputs: spec?.length ?? 0,
         code_dir: "",
         model_dir: "",
-        model_loaded: true,
+        model_loaded: Boolean(reachable && spec),
         mock: false,
         gpu: null,
       });

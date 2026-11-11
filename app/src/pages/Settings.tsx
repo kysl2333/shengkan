@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { getHealth } from "../api";
 import { getEngineConfig, setEngineConfig, type EngineConfig } from "../config";
-import { getAiConfig, setAiConfig, testAi, getDefaultPrompts, type AiConfig } from "../ai";
-import { log, logInfo, openLog } from "../log";
+import { getAiConfig, setAiConfig, testAi, getDefaultPrompts, listModels, type AiConfig, type ModelListResult } from "../ai";
+import { clearLog, log, logInfo, openLog, type LogInfo } from "../log";
 
 const nav = ["AI 服务", "语音引擎", "开发与 MCP"];
 
@@ -12,28 +12,28 @@ const AI_PROVIDERS = [
     name: "小米 MiMo",
     baseUrl: "https://api.xiaomimimo.com/v1",
     model: "mimo-v2.6-flash",
-    note: "内置 TTS",
+    note: "文本模型 · TTS 在 TTS AI",
   },
   {
     id: "qwen",
     name: "千问百炼",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
-    note: "文本分析 · TTS 需单独配置",
+    note: "文本模型",
   },
   {
     id: "deepseek",
     name: "DeepSeek",
     baseUrl: "https://api.deepseek.com/v1",
     model: "deepseek-chat",
-    note: "文本分析 · 无 TTS",
+    note: "文本模型",
   },
   {
     id: "custom",
     name: "自定义",
     baseUrl: "",
     model: "",
-    note: "自己填写地址和模型",
+    note: "自定义文本模型",
   },
 ] as const;
 
@@ -49,8 +49,96 @@ function Row({ label, help, children }: { label: string; help: string; children:
   );
 }
 
+function formatBytes(size = 0) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function ModelPicker({
+  value,
+  onChange,
+  baseUrl,
+  apiKey,
+  provider,
+  kind,
+  placeholder,
+  help,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  baseUrl: string;
+  apiKey: string;
+  provider?: string;
+  kind: "text" | "tts";
+  placeholder: string;
+  help: string;
+}) {
+  const [models, setModels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+
+  async function fetchModels() {
+    setLoading(true);
+    setError("");
+    setNote("");
+    try {
+      const r: ModelListResult = await listModels({ baseUrl, apiKey, provider, kind });
+      setModels(r.models);
+      setNote(
+        r.filtered
+          ? `已按 ${kind === "tts" ? "TTS" : "文本"}模型过滤，共 ${r.total} 个模型`
+          : `接口没有明确的 ${kind === "tts" ? "TTS" : "文本"}标记，已显示全部 ${r.total} 个模型`
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="model-picker">
+      <div className="input-row">
+        <input
+          className="input"
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          className="btn small"
+          onClick={fetchModels}
+          disabled={loading || !baseUrl.trim()}
+        >
+          {loading ? "获取中…" : "获取模型"}
+        </button>
+      </div>
+      {error && <div className="import-error">{error}</div>}
+      {note && !error && <div className="setting-help">{note}</div>}
+      {models.length > 0 && (
+        <div className="model-options">
+          {models.map((model) => (
+            <button
+              key={model}
+              type="button"
+              className={model === value ? "on" : ""}
+              onClick={() => onChange(model)}
+            >
+              {model}
+            </button>
+          ))}
+        </div>
+      )}
+      {!models.length && !note && !error && <div className="setting-help">{help}</div>}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [tab, setTab] = useState("AI 服务");
+  const [aiSection, setAiSection] = useState<"text" | "tts">("text");
   const [engine, setEngine] = useState<{ ok: boolean; text: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [cfg, setCfg] = useState<EngineConfig | null>(null);
@@ -60,14 +148,29 @@ export default function Settings() {
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
   const [logPath, setLogPath] = useState("");
+  const [logMeta, setLogMeta] = useState<LogInfo | null>(null);
+  const [logNotice, setLogNotice] = useState("");
   const [promptDefaults, setPromptDefaults] = useState({ chapter: "", annotate: "" });
 
   useEffect(() => {
     getEngineConfig().then(setCfg).catch(() => {});
     getAiConfig().then(setAiCfg).catch(() => {});
     getDefaultPrompts().then(setPromptDefaults).catch(() => {});
-    logInfo().then((info) => info && setLogPath(info.file)).catch(() => {});
+    logInfo().then((info) => {
+      if (!info) return;
+      setLogMeta(info);
+      setLogPath(info.file);
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (tab !== "开发与 MCP") return;
+    logInfo().then((info) => {
+      if (!info) return;
+      setLogMeta(info);
+      setLogPath(info.file);
+    }).catch(() => {});
+  }, [tab]);
 
   async function saveCfg() {
     if (!cfg) return;
@@ -117,10 +220,10 @@ export default function Settings() {
   const title = tab === "语音引擎" ? "语音引擎" : tab === "开发与 MCP" ? "开发与 MCP" : "AI 服务";
   const desc =
     tab === "语音引擎"
-      ? "远端 Gradio 不需要本机模型；本机模式需要 IndexTTS 代码和权重。改完重启软件生效。"
+      ? "本地 TTS 优先直接连地址或 API；Python 和模型路径只在完全自动化时再填。"
       : tab === "开发与 MCP"
         ? "开发日志记录导入、AI、编辑和生成过程；MCP 让外部 AI 通过 stdio 读写项目。"
-        : "分章、角色标注和情绪判断都用 MiMo。填一次，之后所有项目共用。";
+        : "文本 AI 负责分章、角色和情绪；TTS AI 负责声音。两者可以用不同的服务商和 Key。";
 
   return (
     <section className="page active" id="page-settings">
@@ -136,12 +239,24 @@ export default function Settings() {
           <p className="settings-desc">{desc}</p>
 
           {tab === "AI 服务" && (
+            <div className="seg ai-section-switch">
+              <button className={aiSection === "text" ? "on" : ""} onClick={() => setAiSection("text")}>
+                文本 AI
+              </button>
+              <button className={aiSection === "tts" ? "on" : ""} onClick={() => setAiSection("tts")}>
+                TTS AI
+              </button>
+            </div>
+          )}
+
+          {tab === "AI 服务" && (
             <>
 
+          {aiSection === "text" && (
           <div className="setting-group">
             <Row
-              label="AI 服务商"
-              help="分章和角色标注使用这里的服务。选择预设会自动填地址和模型，仍可手动修改。千问/DeepSeek 目前只用于文本分析，TTS 请在下面单独配置。"
+              label="文本 AI 服务商"
+              help="只用于分章、角色分析、情绪和语速。TTS 在「TTS AI」里单独配置，两者可以用不同服务商。"
             >
               <div className="mode-cards">
                 {AI_PROVIDERS.map((provider) => (
@@ -191,19 +306,22 @@ export default function Settings() {
                 onChange={(e) => aiCfg && setAiCfg({ ...aiCfg, apiKey: e.target.value })}
               />
             </Row>
-            <Row label="模型" help="例如 mimo-v2.6-flash、qwen-plus、deepseek-chat，或自定义模型名。">
-              <input
-                className="input"
+            <Row label="文本模型" help="只显示文本模型；接口不区分时会显示全部。点「获取模型」从云端读取，不会消耗生成次数。">
+              <ModelPicker
                 value={aiCfg?.model ?? ""}
-                onChange={(e) => aiCfg && setAiCfg({ ...aiCfg, model: e.target.value })}
+                onChange={(model) => aiCfg && setAiCfg({ ...aiCfg, model })}
+                baseUrl={aiCfg?.baseUrl ?? ""}
+                apiKey={aiCfg?.apiKey ?? ""}
+                provider={aiCfg?.provider}
+                kind="text"
+                placeholder="mimo-v2.6-flash / qwen-plus / deepseek-chat"
+                help="例如 mimo-v2.6-flash、qwen-plus、deepseek-chat，或自定义模型名。"
               />
             </Row>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <button className="btn primary" onClick={saveAiCfg} disabled={!aiCfg}>保存 AI 配置</button>
-              {aiSaved && <span className="test-result"><span className="dot ok" />{aiSaved}</span>}
-            </div>
           </div>
+          )}
 
+          {aiSection === "tts" && (
           <div className="setting-group">
             <Row
               label="云 TTS 服务"
@@ -226,10 +344,10 @@ export default function Settings() {
                 <span className={`check ${aiCfg?.cloudProviders?.mimo !== false ? "on" : ""}`}>
                   {aiCfg?.cloudProviders?.mimo !== false ? "✓" : " "}
                 </span>
-                小米 MiMo
+                启用小米 MiMo TTS
               </div>
               <div className="tool-help">
-                小米 MiMo 内置 TTS。千问/DeepSeek 目前只用于分章和角色标注，TTS 请用下面的自定义服务。
+                小米 MiMo 内置 TTS；千问和自定义 TTS 需要各自的 Key。关闭后对应云音色和云生成会停用。
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
@@ -260,6 +378,9 @@ export default function Settings() {
                     }
                   />
                 </Row>
+                <div className="tool-help">
+                  预置音色使用 mimo-v2.5-tts；克隆和设计模型由音色卡决定，模型名随音色卡保存。
+                </div>
               </div>
 
               <div
@@ -307,17 +428,16 @@ export default function Settings() {
                       }
                     />
                   </Row>
-                  <Row label="千问 TTS 模型" help="例如 qwen3-tts-flash、qwen-audio-3.1-tts-flash。">
-                    <input
-                      className="input"
+                  <Row label="千问 TTS 模型" help="只显示 TTS 模型；接口不区分时会显示全部。获取模型不消耗 TTS 次数。">
+                    <ModelPicker
                       value={aiCfg.qwenTts?.model ?? ""}
-                      onChange={(e) =>
-                        aiCfg &&
-                        setAiCfg({
-                          ...aiCfg,
-                          qwenTts: { ...aiCfg.qwenTts, model: e.target.value },
-                        })
-                      }
+                      onChange={(model) => aiCfg && setAiCfg({ ...aiCfg, qwenTts: { ...aiCfg.qwenTts, model } })}
+                      baseUrl={aiCfg.qwenTts?.baseUrl ?? ""}
+                      apiKey={aiCfg.qwenTts?.apiKey ?? ""}
+                      provider="qwen"
+                      kind="tts"
+                      placeholder="qwen3-tts-flash"
+                      help="例如 qwen3-tts-flash、qwen-audio-3.1-tts-flash。"
                     />
                   </Row>
                   <Row label="千问 TTS 音色" help="例如 Cherry、longanhuan_v3.6，具体看百炼音色列表。">
@@ -411,17 +531,16 @@ export default function Settings() {
                       }
                     />
                   </Row>
-                  <Row label="TTS 模型" help="例如 tts-1、gpt-4o-mini-tts，或服务商提供的模型名。">
-                    <input
-                      className="input"
+                  <Row label="TTS 模型" help="只显示 TTS 模型；接口不区分时会显示全部。">
+                    <ModelPicker
                       value={aiCfg.customTts?.model ?? ""}
-                      onChange={(e) =>
-                        aiCfg &&
-                        setAiCfg({
-                          ...aiCfg,
-                          customTts: { ...aiCfg.customTts, model: e.target.value },
-                        })
-                      }
+                      onChange={(model) => aiCfg && setAiCfg({ ...aiCfg, customTts: { ...aiCfg.customTts, model } })}
+                      baseUrl={aiCfg.customTts?.baseUrl ?? ""}
+                      apiKey={aiCfg.customTts?.apiKey ?? ""}
+                      provider="custom"
+                      kind="tts"
+                      placeholder="tts-1 / gpt-4o-mini-tts"
+                      help="例如 tts-1、gpt-4o-mini-tts，或服务商提供的模型名。"
                     />
                   </Row>
                   <Row label="TTS 音色 ID" help="服务商的 voice 参数，例如 alloy、nova 或自定义 ID。">
@@ -441,7 +560,10 @@ export default function Settings() {
               )}
             </Row>
           </div>
+          )}
 
+          {aiSection === "text" && (
+          <>
           <div className="setting-group">
             <Row label="分章提示词" help="留空用内置。要求模型只返回章节标题和正文起始片段，不要让模型改写正文。">
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -504,33 +626,41 @@ export default function Settings() {
           </>
           )}
 
+          <div className="settings-actions">
+            <button className="btn primary" onClick={saveAiCfg} disabled={!aiCfg}>保存 AI 配置</button>
+            {aiSaved && <span className="test-result"><span className="dot ok" />{aiSaved}</span>}
+          </div>
+          </>
+          )}
+
           {tab === "语音引擎" && (
             <>
           <div className="setting-group">
-            <Row label="引擎模式" help="远端 Gradio 不需要本机模型；本机模式需要 IndexTTS 代码和权重。">
+            <Row label="引擎模式" help="优先用 TTS 地址/API；只有本机要由声栞自己拉起 Python 推理时才用高级模式。">
               <div className="mode-cards">
                 <div
                   className={`mode-card ${cfg?.mode === "gradio" ? "on" : ""}`}
                   onClick={() => cfg && setCfg({ ...cfg, mode: "gradio" })}
                 >
-                  <b>远端 Gradio</b>
-                  <span>连另一台电脑的 WebUI，本机不用 Python。</span>
+                  <b>TTS 地址 / API</b>
+                  <span>本地或局域网 WebUI，例如 127.0.0.1:7860；不用 Python。</span>
                 </div>
                 <div
                   className={`mode-card ${cfg?.mode === "local" ? "on" : ""}`}
                   onClick={() => cfg && setCfg({ ...cfg, mode: "local" })}
                 >
-                  <b>本机 IndexTTS</b>
-                  <span>本机 Python + 模型，直接推理。</span>
+                  <b>本机 Python（高级）</b>
+                  <span>只有完全自动化时再用；需要 IndexTTS 代码和权重。</span>
                 </div>
               </div>
             </Row>
 
             {cfg?.mode === "gradio" && (
               <>
-                <Row label="远端地址" help="另一台电脑的 Gradio 地址，例如 http://192.168.3.68:7860。">
+                <Row label="TTS 服务地址" help="优先填这里。本地服务就写 http://127.0.0.1:7860，远端 WebUI 写局域网地址。">
                   <input
                     className="input"
+                    placeholder="http://127.0.0.1:7860"
                     value={cfg.gradioUrl}
                     onChange={(e) => setCfg({ ...cfg, gradioUrl: e.target.value })}
                   />
@@ -542,11 +672,18 @@ export default function Settings() {
                     onChange={(e) => setCfg({ ...cfg, gradioApi: e.target.value })}
                   />
                 </Row>
+                <div className="tool-help" style={{ marginBottom: 10 }}>
+                  只要服务以 WebUI / Gradio 运行，本机和远端一样填地址。地址方式启动更快，也不需要 Python 路径。
+                </div>
               </>
             )}
 
             {cfg?.mode === "local" && (
-              <>
+              <details className="advanced-settings">
+                <summary>高级：本机 Python、代码和模型路径</summary>
+                <p className="setting-help">
+                  只有本机要由声栞自己拉起 Python 推理时才需要填。已经在 7860 或其他端口跑着 WebUI 的话，切回上面的地址方式。
+                </p>
                 <Row label="Python 路径" help="IndexTTS 的 venv python.exe。">
                   <input
                     className="input"
@@ -568,7 +705,7 @@ export default function Settings() {
                     onChange={(e) => setCfg({ ...cfg, indexttsModelDir: e.target.value })}
                   />
                 </Row>
-              </>
+              </details>
             )}
 
             <Row label="音色库" help="参考音频目录，留空则用项目下的 voices。">
@@ -599,18 +736,39 @@ export default function Settings() {
           {tab === "开发与 MCP" && (
             <>
           <div className="setting-group">
-            <Row label="开发日志" help="导入、AI 分章、角色标注和编辑操作都会写进这个文件，排查问题时直接发它。">
-              <div className="input-row">
-                <input className="input" value={logPath} readOnly placeholder="还没有日志" />
-                <button
-                  className="btn small"
-                  onClick={async () => {
-                    await openLog();
-                    log("settings", "打开日志文件");
-                  }}
-                >
-                  打开
-                </button>
+            <Row label="开发日志" help="导入、AI 分章、角色标注和编辑操作都会写进这个文件，排查问题时直接发它。只存在本机，不写进项目或安装包。">
+              <div className="log-box">
+                <div className="input-row">
+                  <input className="input" value={logPath} readOnly placeholder="还没有日志" />
+                  <button
+                    className="btn small"
+                    onClick={async () => {
+                      await openLog();
+                      log("settings", "打开日志文件");
+                    }}
+                  >
+                    打开
+                  </button>
+                  <button
+                    className="btn small ghost"
+                    onClick={async () => {
+                      if (!window.confirm("清空开发日志？只会清空日志文件，不影响项目、音频和配置。")) return;
+                      const r = await clearLog();
+                      if (r) {
+                        setLogMeta(r.info);
+                        setLogNotice(`已清空，释放 ${formatBytes(r.freed)}`);
+                        window.setTimeout(() => setLogNotice(""), 3000);
+                      }
+                    }}
+                  >
+                    清空
+                  </button>
+                </div>
+                <div className="log-meta">
+                  <span>{logMeta ? `当前 ${formatBytes(logMeta.totalSize ?? logMeta.size)} · 主日志 ${formatBytes(logMeta.size)}` : "还没有日志"}</span>
+                  <span>超过 5 MB 自动轮转，保留 1 份备份；不会一直占空间。</span>
+                </div>
+                {logNotice && <div className="test-result"><span className="dot ok" />{logNotice}</div>}
               </div>
             </Row>
           </div>
@@ -619,9 +777,28 @@ export default function Settings() {
             <Row label="MCP 服务器" help="让外部 AI 读取项目和修改台词。默认读最近修改的项目。">
               <div className="test-result"><span className="dot ok" />stdio · node mcp/server.mjs</div>
             </Row>
-            <Row label="权限" help="MCP 客户端自己决定调用哪些工具；声栞不在应用内额外限制。">
-              <div className="test-result" style={{ color: "var(--text-faint)" }}>
-                由 MCP 客户端控制
+            <Row label="权限" help="通过环境变量 SHENGKAN_MCP_PERMISSION 控制，默认 generate；改完需要重启 OpenCode/MCP 客户端。MCP 客户端决定调用哪个工具，声栞再做第二道限制。">
+              <div className="mcp-permissions">
+                <div><b>read</b><span>列项目、读项目、读台词、查审计</span></div>
+                <div><b>edit</b><span>只读 + 改台词/角色/情绪/语速 + 拆句预览</span></div>
+                <div><b>generate</b><span>可改 + 调 TTS 生成音频（默认）</span></div>
+                <div><b>full</b><span>可生成 + 查看回收站项目列表</span></div>
+              </div>
+            </Row>
+            <Row label="可用工具" help="用 get_permissions 可以在会话里确认当前级别。">
+              <div className="tool-chips">
+                {[
+                  "list_projects",
+                  "read_project",
+                  "read_lines",
+                  "update_line",
+                  "split_chapter",
+                  "generate_line",
+                  "get_audit",
+                  "get_permissions",
+                ].map((tool) => (
+                  <span className="tool-chip" key={tool}>{tool}</span>
+                ))}
               </div>
             </Row>
           </div>

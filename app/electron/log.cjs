@@ -3,6 +3,7 @@ const path = require("node:path");
 const { app, shell } = require("electron");
 
 const MAX_SIZE = 5 * 1024 * 1024;
+const KEEP_BACKUPS = 1;
 
 function logFile() {
   return path.join(app.getPath("userData"), "logs", "app.log");
@@ -10,8 +11,15 @@ function logFile() {
 
 function rotate(file) {
   try {
-    if (fs.statSync(file).size < MAX_SIZE) return;
-    fs.renameSync(file, `${file}.1`);
+    if (!fs.existsSync(file) || fs.statSync(file).size < MAX_SIZE) return;
+    const backup = `${file}.1`;
+    if (fs.existsSync(backup)) fs.rmSync(backup, { force: true });
+    fs.renameSync(file, backup);
+    // 只保留一份备份；更旧的日志不占空间。
+    for (let i = KEEP_BACKUPS + 1; i <= 3; i++) {
+      const extra = `${file}.${i}`;
+      if (fs.existsSync(extra)) fs.rmSync(extra, { force: true });
+    }
   } catch {
     /* 文件还不存在 */
   }
@@ -43,12 +51,40 @@ function safe(value) {
 function info() {
   const file = logFile();
   let size = 0;
+  let backupSize = 0;
   try {
     size = fs.statSync(file).size;
   } catch {
     /* 还没有日志 */
   }
-  return { file, size };
+  try {
+    backupSize = fs.statSync(`${file}.1`).size;
+  } catch {
+    /* 还没有备份 */
+  }
+  return {
+    file,
+    size,
+    backupSize,
+    totalSize: size + backupSize,
+    maxSize: MAX_SIZE,
+    keepBackups: KEEP_BACKUPS,
+  };
+}
+
+async function clear() {
+  const file = logFile();
+  let freed = 0;
+  for (const target of [file, `${file}.1`]) {
+    try {
+      if (!fs.existsSync(target)) continue;
+      freed += fs.statSync(target).size;
+      fs.writeFileSync(target, "", "utf8");
+    } catch {
+      /* 清不掉就保留 */
+    }
+  }
+  return { ok: true, freed, info: info() };
 }
 
 async function open() {
@@ -63,4 +99,4 @@ async function open() {
   return file;
 }
 
-module.exports = { write, info, open, logFile };
+module.exports = { write, info, clear, open, logFile };

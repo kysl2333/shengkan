@@ -161,6 +161,31 @@ function text(value) {
   };
 }
 
+const PERMISSION_LEVELS = { read: 0, edit: 1, generate: 2, full: 3 };
+const PERMISSION = String(process.env.SHENGKAN_MCP_PERMISSION || "generate").toLowerCase();
+const PERMISSION_LABELS = {
+  read: "只读：列项目、读项目、读台词、查审计",
+  edit: "可改：只读 + 修改台词/角色/情绪/语速 + 拆句预览",
+  generate: "可生成：可改 + 调 TTS 生成音频（默认）",
+  full: "完全控制：可生成 + 查看回收站项目列表",
+};
+
+function allowed(action) {
+  const need = PERMISSION_LEVELS[action] ?? 99;
+  const have = PERMISSION_LEVELS[PERMISSION] ?? -1;
+  return have >= need;
+}
+
+function deny(action) {
+  return {
+    ...text(
+      `权限不足：当前 SHENGKAN_MCP_PERMISSION=${PERMISSION}，这个操作需要 ${action}。\n` +
+        `可用级别：${Object.keys(PERMISSION_LEVELS).join(" / ")}。`
+    ),
+    isError: true,
+  };
+}
+
 async function engineCall(endpoint, payload, timeout = 180000) {
   let response;
   try {
@@ -186,7 +211,28 @@ async function engineCall(endpoint, payload, timeout = 180000) {
   return data;
 }
 
-const server = new McpServer({ name: "shengkan", version: "0.2.0" });
+const server = new McpServer({ name: "shengkan", version: "0.3.0" });
+
+server.tool(
+  "get_permissions",
+  "查看当前 MCP 权限级别、可用工具和限制。",
+  {},
+  async () => {
+    const tools = ["list_projects", "read_project", "read_lines", "get_audit", "get_permissions"];
+    if (allowed("edit")) tools.push("update_line", "split_chapter");
+    if (allowed("generate")) tools.push("generate_line");
+    if (allowed("full")) tools.push("list_projects(includeTrash=true)");
+    return text({
+      permission: PERMISSION,
+      label: PERMISSION_LABELS[PERMISSION] || "未知级别",
+      allowed: Object.fromEntries(
+        Object.keys(PERMISSION_LEVELS).map((k) => [k, allowed(k)])
+      ),
+      tools,
+      env: "SHENGKAN_MCP_PERMISSION=read|edit|generate|full",
+    });
+  }
+);
 
 server.tool(
   "list_projects",
@@ -195,11 +241,13 @@ server.tool(
     includeTrash: z.boolean().optional().describe("是否包含 projects/.trash 里的项目"),
   },
   async ({ includeTrash = false }) => {
+    if (includeTrash && !allowed("full")) return deny("full");
     const items = projectEntries(PROJECTS, includeTrash).sort((a, b) =>
       String(b.project.updatedAt).localeCompare(String(a.project.updatedAt))
     );
     return text({
       count: items.length,
+      permission: PERMISSION,
       projects: items.map(projectSummary),
     });
   }
@@ -215,6 +263,7 @@ server.tool(
       id: p.id,
       title: p.title,
       file: currentFile,
+      permission: PERMISSION,
       updatedAt: p.updatedAt,
       casts: p.casts,
       chapters: p.chapters.map((c) => ({
@@ -253,6 +302,7 @@ server.tool(
     project: PROJECT_ARG,
   },
   async ({ chapterId, lineId, text: newText, speaker, emotion, speed, note, project }) => {
+    if (!allowed("edit")) return deny("edit");
     if (
       newText === undefined &&
       speaker === undefined &&
@@ -287,6 +337,7 @@ server.tool(
   "调用本地引擎把原文拆成台词，只返回结果不写入。确认后再用 update_line 或手动导入。",
   { text: z.string().describe("要拆分的原文"), project: PROJECT_ARG },
   async ({ text: source, project }) => {
+    if (!allowed("edit")) return deny("edit");
     try {
       const data = await engineCall("/v1/split", { text: source }, 60000);
       audit("split_chapter", { project, characters: source.length, segments: data.count });
@@ -307,6 +358,7 @@ server.tool(
     project: PROJECT_ARG,
   },
   async ({ chapterId, lineId, voicePath, project }) => {
+    if (!allowed("generate")) return deny("generate");
     const p = readProject(project);
     const c = p.chapters.find((x) => x.id === chapterId);
     const line = c?.lines.find((l) => l.id === lineId);
