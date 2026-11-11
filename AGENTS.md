@@ -177,6 +177,9 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 规则重拆和整本重拆只能换断句：文字完全相同的旧台词要保留 speaker / emotion / speed / audio，只删除没被复用的旧音频。
 - 断句始终用规则，AI 只负责角色、情绪、语速；不要改成让 AI 拆句，否则会改写原文或漏句。
 - AI 标注默认整章一次发送，开启 MiMo thinking；只有超长章节才按 6 万字符切段。思考走 `reasoning_content` / SSE，只展示不解析，绝不能当 JSON 结果。
+- 成片时间轴必须按全章台词顺序累计时间；每个角色轨道只放自己的句子，位置按全章总时长计算，不能把每个角色自己的台词铺满整行。
+- AI 标注超时 30 分钟；失败时保留思考过程和错误提示，不要在 `finally` 里无条件清空。
+- 自定义文本 AI 的 `reasoning_effort` 只在用户勾选「思考强度」时发送；不勾选不传，使用模型默认。TTS 不发。
 - 角色标注提示词不能鼓励「根据引号里的名字判断说话人」；名字出现在引号内容里不等于说话人。
 - MCP 权限用 `SHENGKAN_MCP_PERMISSION=read|edit|generate|full`，默认 `generate`；写操作和生成在 server 内还有第二道限制。
 - 开发日志 5 MB 轮转、保留 1 份备份；不要在 UI 里假装日志无限增长。

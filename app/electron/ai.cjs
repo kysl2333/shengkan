@@ -36,6 +36,10 @@ const DEFAULTS = {
     chapter: "",
     annotate: "",
   },
+  customThinking: {
+    enabled: false,
+    effort: "medium",
+  },
 };
 
 const PROVIDERS = {
@@ -118,6 +122,7 @@ function readAiConfig() {
     customTts: { ...DEFAULTS.customTts, ...(saved.customTts || {}) },
     qwenTts: { ...DEFAULTS.qwenTts, ...(saved.qwenTts || {}) },
     mimoTts: { ...DEFAULTS.mimoTts, ...(saved.mimoTts || {}) },
+    customThinking: { ...DEFAULTS.customThinking, ...(saved.customThinking || {}) },
     apiKey: saved.apiKey || process.env.MIMO_API_KEY || "",
   };
 }
@@ -140,6 +145,10 @@ function writeAiConfig(cfg) {
   next.mimoTts = {
     ...DEFAULTS.mimoTts,
     ...(cfg.mimoTts || next.mimoTts || {}),
+  };
+  next.customThinking = {
+    ...DEFAULTS.customThinking,
+    ...(cfg.customThinking || next.customThinking || {}),
   };
   const file = configFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -223,6 +232,10 @@ async function chatJSON(messages, options = {}) {
   }
 
   const isMimo = cfg.provider === "mimo" || /xiaomimimo/i.test(String(cfg.baseUrl || ""));
+  const customEffort =
+    !isMimo && cfg.provider === "custom" && cfg.customThinking?.enabled
+      ? cfg.customThinking.effort || "medium"
+      : "";
   const useStream = Boolean(options.stream);
   const body = {
     model: cfg.model,
@@ -239,6 +252,7 @@ async function chatJSON(messages, options = {}) {
     if (useStream) body.stream_options = { include_usage: true };
   } else {
     body.max_tokens = options.maxTokens ?? 16384;
+    if (customEffort) body.reasoning_effort = customEffort;
   }
 
   const timeout = AbortSignal.timeout(options.timeout ?? TIMEOUT_MS);
@@ -250,12 +264,22 @@ async function chatJSON(messages, options = {}) {
   };
   if (isMimo) headers["api-key"] = cfg.apiKey;
 
-  const r = await fetch(`${normalizeBase(cfg.baseUrl)}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  let r;
+  try {
+    r = await fetch(`${normalizeBase(cfg.baseUrl)}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    if (e?.name === "TimeoutError") {
+      throw new Error(
+        `AI 思考超时（${Math.round((options.timeout ?? TIMEOUT_MS) / 60000)} 分钟），可以重试或把本章拆短`
+      );
+    }
+    throw e;
+  }
 
   if (!r.ok) {
     const raw = await r.text();
@@ -521,7 +545,8 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
           signal: detectAbort.signal,
           thinking,
           stream: true,
-          maxTokens: isMimo ? 32768 : 16384,
+          timeout: 30 * 60 * 1000,
+          maxTokens: isMimo ? 65536 : 16384,
           onReasoning: (chunk) =>
             onProgress?.({
               done: i,

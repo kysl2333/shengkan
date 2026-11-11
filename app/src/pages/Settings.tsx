@@ -318,6 +318,51 @@ export default function Settings() {
                 help="例如 mimo-v2.6-flash、qwen-plus、deepseek-chat，或自定义模型名。"
               />
             </Row>
+            {aiCfg?.provider === "custom" && (
+              <Row
+                label="思考强度"
+                help="只对自定义文本 AI 生效。勾选后发送 reasoning_effort；不勾选不传，使用模型默认设置。TTS 不参与思考。"
+              >
+                <div
+                  className="check-row"
+                  style={{ cursor: "pointer" }}
+                  onClick={() =>
+                    aiCfg &&
+                    setAiCfg({
+                      ...aiCfg,
+                      customThinking: {
+                        ...aiCfg.customThinking,
+                        enabled: !aiCfg.customThinking?.enabled,
+                      },
+                    })
+                  }
+                >
+                  <span className={`check ${aiCfg.customThinking?.enabled ? "on" : ""}`}>
+                    {aiCfg.customThinking?.enabled ? "✓" : " "}
+                  </span>
+                  发送思考强度（不勾选用模型默认）
+                </div>
+                {aiCfg.customThinking?.enabled && (
+                  <div className="seg" style={{ marginTop: 8, flex: "0 0 210px" }}>
+                    {(["low", "medium", "high"] as const).map((level) => (
+                      <button
+                        key={level}
+                        className={aiCfg.customThinking?.effort === level ? "on" : ""}
+                        onClick={() =>
+                          aiCfg &&
+                          setAiCfg({
+                            ...aiCfg,
+                            customThinking: { ...aiCfg.customThinking, effort: level },
+                          })
+                        }
+                      >
+                        {level === "low" ? "低" : level === "medium" ? "中" : "高"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Row>
+            )}
           </div>
           )}
 

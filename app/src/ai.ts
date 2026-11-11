@@ -24,6 +24,10 @@ export interface AiConfig {
     voice?: string;
     languageType?: string;
   };
+  customThinking?: {
+    enabled?: boolean;
+    effort?: "low" | "medium" | "high";
+  };
   mimoTts?: {
     baseUrl?: string;
     apiKey?: string;
@@ -109,6 +113,7 @@ const DEFAULTS: AiConfig = {
   apiKey: "",
   autoChapter: true,
   annotateThinking: true,
+  customThinking: { enabled: false, effort: "medium" },
 };
 
 function bridge() {

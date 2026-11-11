@@ -150,23 +150,39 @@ export default function Master({ project }: { project: Project | null }) {
     setMergeMsg("");
   }, [project?.id]);
 
-  const tracks = useMemo(() => {
-    const names: string[] = [];
-    for (const line of lines) {
-      if (!names.includes(line.speaker)) names.push(line.speaker);
-    }
-    return names.map((name, index) => {
-      const own = lines.filter((l) => l.speaker === name);
-      const total = own.reduce((sum, l) => sum + Math.max(1, l.text.length), 0);
+  const timeline = useMemo(() => {
+    const withDuration = lines.map((line) => ({
+      line,
+      duration: Math.max(0.6, line.text.trim().length / 3.6),
+    }));
+    const totalSec = withDuration.reduce((sum, item) => sum + item.duration, 0) || 1;
+
+    let cursor = 0;
+    const entries = withDuration.map(({ line, duration }) => {
+      const start = cursor;
+      cursor += duration;
       return {
-        name,
-        cls: TRACK_CLASS[index % TRACK_CLASS.length],
-        clips: own.map((l) => ({
-          id: l.id,
-          width: Math.max(2, (Math.max(1, l.text.length) / total) * 100),
-        })),
+        ...line,
+        start,
+        end: cursor,
+        left: (start / totalSec) * 100,
+        width: Math.max(0.5, (duration / totalSec) * 100),
       };
     });
+
+    const names: string[] = [];
+    for (const entry of entries) {
+      if (!names.includes(entry.speaker)) names.push(entry.speaker);
+    }
+
+    return {
+      totalSec,
+      tracks: names.map((name, index) => ({
+        name,
+        cls: TRACK_CLASS[index % TRACK_CLASS.length],
+        clips: entries.filter((entry) => entry.speaker === name),
+      })),
+    };
   }, [lines]);
 
   const checks = [
@@ -382,24 +398,30 @@ export default function Master({ project }: { project: Project | null }) {
             <div className="timeline-head">
               <span className="section-label">时间轴</span>
               <span className="script-meta" style={{ color: "var(--text-faint)" }}>
-                按文本长度估算 · 导出后以实际音频为准
+                每行一个角色 · 横向按台词顺序估算 · 悬停查看句子
               </span>
             </div>
             <div className="ruler">
-              <span>00:00</span><span>01:00</span><span>02:00</span><span>03:00</span>
-              <span>04:00</span><span>05:00</span><span>06:12</span>
+              {Array.from({ length: 7 }, (_, i) => (
+                <span key={i}>{formatClock((timeline.totalSec * i) / 6)}</span>
+              ))}
             </div>
-            {tracks.map((t) => (
+            {timeline.tracks.map((t) => (
               <div className="track" key={t.name}>
                 <div className="track-label">{t.name}</div>
                 <div className="track-lane">
                   {t.clips.map((c) => (
-                    <span key={c.id} className={`clip ${t.cls}`} style={{ width: `${c.width}%` }} title={`第 ${c.id} 句`} />
+                    <span
+                      key={c.id}
+                      className={`clip ${t.cls}`}
+                      style={{ left: `${c.left}%`, width: `${c.width}%` }}
+                      title={`第 ${c.id} 句 · ${formatClock(c.start)}–${formatClock(c.end)} · ${c.text.slice(0, 50)}`}
+                    />
                   ))}
                 </div>
               </div>
             ))}
-            {!tracks.length && <div className="recent-row"><span>还没有台词</span></div>}
+            {!timeline.tracks.length && <div className="recent-row"><span>还没有台词</span></div>}
           </div>
 
           <div className="panel-box">

@@ -180,6 +180,8 @@ export default function Studio({
   const [aiMsg, setAiMsg] = useState("");
   const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
   const [aiThinking, setAiThinking] = useState("");
+  const [aiElapsed, setAiElapsed] = useState(0);
+  const aiClockRef = useRef<number | null>(null);
   const thinkingBoxRef = useRef<HTMLDivElement>(null);
   const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [systemVoice, setSystemVoice] = useState("");
@@ -256,6 +258,7 @@ export default function Studio({
 
   useEffect(() => {
     return () => {
+      stopAiClock();
       audioRef.current?.pause();
       audioRef.current = null;
     };
@@ -395,6 +398,28 @@ export default function Studio({
   function showToast(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast((cur) => (cur === msg ? "" : cur)), 4500);
+  }
+
+  function startAiClock() {
+    const start = Date.now();
+    setAiElapsed(0);
+    if (aiClockRef.current) window.clearInterval(aiClockRef.current);
+    aiClockRef.current = window.setInterval(() => {
+      setAiElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+  }
+
+  function stopAiClock() {
+    if (!aiClockRef.current) return;
+    window.clearInterval(aiClockRef.current);
+    aiClockRef.current = null;
+  }
+
+  function dismissAiPanel() {
+    setAiMsg("");
+    setAiThinking("");
+    setAiElapsed(0);
+    setAiProgress({ done: 0, total: 0 });
   }
 
   function addLog(msg: string) {
@@ -903,8 +928,10 @@ export default function Studio({
     setTask("running");
     setLogs([]);
     setAiThinking("");
+    startAiClock();
     setAiProgress({ done: 0, total: 1 });
     addLog(`整章交给 AI：${script.length} 句 · ${castList.length} 个角色 · 开启思考`);
+    let failed = false;
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
       setAiProgress({ done: p.done, total: p.total });
@@ -942,15 +969,22 @@ export default function Studio({
         `修改 ${changed} 句 · ${casts.length} 个角色`
       );
     } catch (e) {
-      addLog(`AI 标注失败：${(e as Error).message}`);
+      failed = true;
+      const msg = (e as Error).message;
+      addLog(`AI 标注失败：${msg}`);
+      setAiMsg(`AI 标注失败：${msg}`);
+      setAiProgress({ done: 0, total: 0 });
       setTask("idle");
-      log("ai", "AI 标注角色失败", { error: (e as Error).message });
+      log("ai", "AI 标注角色失败", { error: msg });
     } finally {
       off();
       setAnnotating(false);
-      setAiMsg("");
-      setAiThinking("");
-      setAiProgress({ done: 0, total: 0 });
+      stopAiClock();
+      if (!failed) {
+        setAiMsg("");
+        setAiThinking("");
+        setAiProgress({ done: 0, total: 0 });
+      }
     }
   }
 
@@ -968,9 +1002,11 @@ export default function Studio({
     setLogs([]);
     setAnnotating(true);
     setAiThinking("");
+    startAiClock();
     setAiProgress({ done: 0, total: 0 });
     addLog(`读取原文 ${source.length.toLocaleString()} 字`);
 
+    let failed = false;
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
       setAiProgress({ done: p.done, total: p.total });
@@ -1056,15 +1092,22 @@ export default function Studio({
         `${next.length} 句 · ${casts.length} 个角色 · 修改 ${changed} 句`
       );
     } catch (e) {
-      addLog(`AI 重拆失败：${(e as Error).message}`);
+      failed = true;
+      const msg = (e as Error).message;
+      addLog(`AI 重拆失败：${msg}`);
+      setAiMsg(`AI 重拆失败：${msg}`);
+      setAiProgress({ done: 0, total: 0 });
       setTask("idle");
-      log("ai", "AI 重拆失败", { error: (e as Error).message });
+      log("ai", "AI 重拆失败", { error: msg });
     } finally {
       off();
       setAnnotating(false);
-      setAiMsg("");
-      setAiThinking("");
-      setAiProgress({ done: 0, total: 0 });
+      stopAiClock();
+      if (!failed) {
+        setAiMsg("");
+        setAiThinking("");
+        setAiProgress({ done: 0, total: 0 });
+      }
     }
   }
 
@@ -1168,7 +1211,9 @@ export default function Studio({
     setTask("running");
     setLogs([]);
     setAiThinking("");
+    startAiClock();
     setAiProgress({ done: 0, total: project.chapters.length });
+    let failed = false;
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
       if (p.reasoning) {
@@ -1299,14 +1344,22 @@ export default function Studio({
         `完成 ${processed} 章 · 修改 ${changedTotal} 句`
       );
     } catch (e) {
-      addLog(`整本标注失败：${(e as Error).message}`);
+      failed = true;
+      const msg = (e as Error).message;
+      addLog(`整本标注失败：${msg}`);
+      setAiMsg(`整本标注失败：${msg}`);
+      setAiProgress({ done: 0, total: 0 });
       setTask("idle");
-      log("ai", "整本标注失败", { error: (e as Error).message });
+      log("ai", "整本标注失败", { error: msg });
     } finally {
       off();
       setAnnotating(false);
-      setAiMsg("");
-      setAiProgress({ done: 0, total: 0 });
+      stopAiClock();
+      if (!failed) {
+        setAiMsg("");
+        setAiThinking("");
+        setAiProgress({ done: 0, total: 0 });
+      }
     }
   }
 
@@ -1325,7 +1378,8 @@ export default function Studio({
     return lines.some(lineIsCloud) ? 2 : 1;
   }
 
-  async function synthesizeLine(line: ProjectLine): Promise<string> {    const cast = castList.find((c) => c.name === line.speaker);
+  async function synthesizeLine(line: ProjectLine): Promise<string> {
+    const cast = castList.find((c) => c.name === line.speaker);
     if (cast?.cloudModel && cast.cloudVoice) {
       const emotion = line.emotion && line.emotion !== "平静" ? `用${line.emotion}的语气` : "用自然平静的语气";
       const speed =
@@ -2340,11 +2394,15 @@ export default function Studio({
                     </div>
                   ) : null}
 
-                  {annotating && (
+                  {(annotating || aiThinking) && (
                     <div className="ai-thinking">
                       <div className="ai-thinking-head">
                         <span>思考过程</span>
-                        <span>{aiThinking ? "实时显示 · 不写入结果" : "等待模型…"}</span>
+                        <span>
+                          {annotating
+                            ? `已思考 ${formatClock(aiElapsed)} · 仅展示`
+                            : "已结束 · 不写入结果"}
+                        </span>
                       </div>
                       <div className="ai-thinking-body" ref={thinkingBoxRef}>
                         {aiThinking ||
@@ -2362,6 +2420,12 @@ export default function Studio({
                   {annotating && (
                     <button className="btn small" onClick={stopAi} style={{ width: "100%", marginTop: 8 }}>
                       停止 AI 分析
+                    </button>
+                  )}
+
+                  {!annotating && (
+                    <button className="btn small ghost" onClick={dismissAiPanel} style={{ width: "100%", marginTop: 8 }}>
+                      关闭提示
                     </button>
                   )}
                 </div>
