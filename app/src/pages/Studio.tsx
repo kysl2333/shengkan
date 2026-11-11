@@ -40,6 +40,41 @@ function lineStatusKey(chapterKey: string, lineId: number) {
   return `${chapterKey}:${lineId}`;
 }
 
+function castEngineInfo(cast?: ProjectCast) {
+  const model = cast?.cloudModel || "";
+  if (!cast?.cloudVoice || !model) {
+    return { engine: "IndexTTS 2.5", detail: "本地或远端 Gradio", cloud: false, model: "" };
+  }
+  const engine = model.startsWith("mimo")
+    ? "小米云 TTS"
+    : model.startsWith("qwen:")
+      ? "千问 TTS"
+      : model.startsWith("custom:")
+        ? "自定义 TTS"
+        : "云 TTS";
+  return { engine, detail: "云端生成，保留本地音频", cloud: true, model };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(task: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    task.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
   let cursor = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -130,6 +165,15 @@ export default function Studio({
   const [genState, setGenState] = useState<"idle" | "generating" | "done" | "error">("idle");
   const [cancelableGen, setCancelableGen] = useState(false);
   const [genMsg, setGenMsg] = useState("");
+  const [genProgress, setGenProgress] = useState({ done: 0, total: 0 });
+  const [genTarget, setGenTarget] = useState<{
+    id: number;
+    speaker: string;
+    engine: string;
+    detail: string;
+    cloud: boolean;
+  } | null>(null);
+  const [flashLine, setFlashLine] = useState(0);
   const [editing, setEditing] = useState<number | null>(null);
   const [speakerFor, setSpeakerFor] = useState<number | null>(null);
   const [annotating, setAnnotating] = useState(false);
@@ -147,6 +191,8 @@ export default function Studio({
   const [audioRate, setAudioRate] = useState(1);
   const [auditionMode, setAuditionMode] = useState<"single" | "continuous">("single");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRateRef = useRef(1);
+  const continuousRef = useRef<{ queue: ProjectLine[]; index: number } | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [editingSource, setEditingSource] = useState(false);
   const [sourceDraft, setSourceDraft] = useState("");
@@ -198,6 +244,16 @@ export default function Studio({
     const el = thinkingBoxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [aiThinking]);
+
+  useEffect(() => {
+    if (!flashLine) return;
+    const el = document.getElementById(`line-${flashLine}`);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    const timer = window.setTimeout(() => setFlashLine(0), 1800);
+    return () => window.clearTimeout(timer);
+  }, [flashLine]);
 
   useEffect(() => {
     if (!action) {
@@ -265,6 +321,14 @@ export default function Studio({
 
   const selected = script.find((l) => l.id === current) ?? script[0];
   const selectedCast = castList.find((c) => c.name === selected?.speaker);
+  const selectedEngine = castEngineInfo(selectedCast);
+  const genEngine = genTarget ?? {
+    id: 0,
+    speaker: "",
+    engine: selectedEngine.engine,
+    detail: selectedEngine.detail,
+    cloud: selectedEngine.cloud,
+  };
 
   // 切到原文时，定位到当前台词所在段并短暂高亮。
   useEffect(() => {
@@ -381,7 +445,7 @@ export default function Studio({
     };
     projectRef.current = nextProject;
     if (persist) onSave(nextProject);
-    if (persist && chapterIdRef.current === targetChapterId) setScript(lines);
+    if (chapterIdRef.current === targetChapterId) setScript(lines);
   }
 
   function persistProject() {
@@ -1239,10 +1303,7 @@ export default function Studio({
   }
 
   function generationLimit(lines: ProjectLine[]) {
-    const cloud = lines.filter(lineIsCloud).length;
-    if (!cloud) return 1;
-    if (cloud === lines.length) return 3;
-    return 2;
+    return lines.some(lineIsCloud) ? 2 : 1;
   }
 
   async function synthesizeLine(line: ProjectLine): Promise<string> {    const cast = castList.find((c) => c.name === line.speaker);
@@ -1310,9 +1371,9 @@ export default function Studio({
     log("tts", "系统语音试听", { chars: text.length, voice: voice?.name || "默认" });
   }
 
-  function loadAndPlay(src: string, onEnded?: () => void) {
+  function loadAndPlay(src: string, onEnded?: () => void, force = false) {
     if (!src) return;
-    if (audioSrc === src && audioRef.current) {
+    if (!force && audioSrc === src && audioRef.current) {
       if (audioRef.current.paused) {
         audioRef.current.play().catch(() => {});
         setAudioPlaying(true);
@@ -1326,7 +1387,7 @@ export default function Studio({
     audioRef.current?.pause();
     const audio = new Audio(src);
     audioRef.current = audio;
-    audio.playbackRate = audioRate;
+    audio.playbackRate = audioRateRef.current;
     audio.preload = "auto";
     const syncDuration = () => {
       if (Number.isFinite(audio.duration) && audio.duration > 0) setAudioDuration(audio.duration);
@@ -1370,29 +1431,37 @@ export default function Studio({
     }
   }
 
+  function playContinuous(queue: ProjectLine[], index: number) {
+    if (index >= queue.length) {
+      continuousRef.current = null;
+      return;
+    }
+    const line = queue[index];
+    continuousRef.current = { queue, index };
+    setCurrent(line.id);
+    setFlashLine(line.id);
+    loadAndPlay(audioUrl(line.audio!), () => playContinuous(queue, index + 1), true);
+  }
+
   function playCurrent() {
     if (auditionMode === "continuous") {
       const start = script.findIndex((l) => l.id === selected?.id);
-      const queue = script
-        .slice(Math.max(0, start))
-        .filter((l) => l.audio)
-        .map((l) => audioUrl(l.audio!));
+      const queue = script.slice(Math.max(0, start)).filter((l) => l.audio);
       if (!queue.length) {
         setGenMsg("从当前句往后还没有生成音频");
         return;
       }
-      const playAt = (i: number) => {
-        if (i >= queue.length) return;
-        loadAndPlay(queue[i], () => playAt(i + 1));
-      };
-      playAt(0);
+      playContinuous(queue, 0);
       return;
     }
-    if (selected?.audio) loadAndPlay(audioUrl(selected.audio));
-    else setGenMsg("这一句还没有生成音频");
+    if (selected?.audio) {
+      continuousRef.current = null;
+      loadAndPlay(audioUrl(selected.audio));
+    } else setGenMsg("这一句还没有生成音频");
   }
 
   function playLine(line: ProjectLine) {
+    continuousRef.current = null;
     if (line.audio) loadAndPlay(audioUrl(line.audio));
     else setGenMsg(`第 ${line.id} 句还没有生成音频`);
   }
@@ -1407,8 +1476,26 @@ export default function Studio({
       Number.isFinite(duration) &&
       duration > 0
     ) {
-      audioRef.current.currentTime = pct * duration;
+      const target = pct * duration;
+      try {
+        audioRef.current.currentTime = target;
+        setAudioTime(target);
+      } catch {
+        setGenMsg("音频还没加载完，稍后再拖动");
+      }
     }
+  }
+
+  function markGenTarget(line: ProjectLine) {
+    const cast = castList.find((c) => c.name === line.speaker);
+    const info = castEngineInfo(cast);
+    setGenTarget({
+      id: line.id,
+      speaker: line.speaker,
+      engine: info.engine,
+      detail: info.detail,
+      cloud: info.cloud,
+    });
   }
 
   async function generateSingle(line: ProjectLine) {
@@ -1420,15 +1507,22 @@ export default function Studio({
     const statusKey = lineStatusKey(originChapter, line.id);
     setCancelableGen(false);
     setGenState("generating");
+    setGenProgress({ done: 0, total: 1 });
+    markGenTarget(line);
     setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
     setGenMsg(`正在生成第 ${line.id} 句…`);
     showToast(`正在生成第 ${line.id} 句 · ${line.speaker}`);
     try {
-      const url = await synthesizeLine(line);
+      const url = await withTimeout(
+        synthesizeLine(line),
+        240000,
+        "生成超时（4 分钟），请检查网络或引擎后重试"
+      );
       saveChapterLines(originChapter, (lines) =>
         lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l))
       );
       setGenState("done");
+      setGenProgress({ done: 1, total: 1 });
       setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
       setGenMsg(`第 ${line.id} 句生成完成，正在播放`);
       showToast(`第 ${line.id} 句生成完成`);
@@ -1472,20 +1566,30 @@ export default function Studio({
     genStopRef.current = false;
     setCancelableGen(true);
     setGenState("generating");
+    setGenProgress({ done: 0, total: targets.length });
     let ok = 0;
     let finished = 0;
     const limit = generationLimit(targets);
 
     await runPool(targets, limit, async (line) => {
       if (genStopRef.current) return;
+      const statusKey = lineStatusKey(target.id, line.id);
       setGenMsg(`「${target.title}」 ${finished + 1}/${targets.length} · ${line.speaker}`);
+      markGenTarget(line);
+      setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
       try {
-        const url = await synthesizeLine(line);
+        const url = await withTimeout(
+          synthesizeLine(line),
+          240000,
+          "生成超时（4 分钟），请检查网络或引擎后重试"
+        );
         saveChapterLines(target.id, (lines) =>
           lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
         );
         ok++;
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
       } catch (e) {
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
         log("generate", "生成失败", {
           lineId: line.id,
           speaker: line.speaker,
@@ -1494,6 +1598,7 @@ export default function Studio({
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
       } finally {
         finished++;
+        setGenProgress({ done: finished, total: targets.length });
       }
     });
 
@@ -1512,20 +1617,30 @@ export default function Studio({
     genStopRef.current = false;
     setCancelableGen(true);
     setGenState("generating");
+    setGenProgress({ done: 0, total: targets.length });
     let ok = 0;
     let finished = 0;
     const limit = generationLimit(targets);
 
     await runPool(targets, limit, async (line) => {
       if (genStopRef.current) return;
+      const statusKey = lineStatusKey(originChapter, line.id);
       setGenMsg(`生成勾选 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
+      markGenTarget(line);
+      setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
       try {
-        const url = await synthesizeLine(line);
+        const url = await withTimeout(
+          synthesizeLine(line),
+          240000,
+          "生成超时（4 分钟），请检查网络或引擎后重试"
+        );
         saveChapterLines(originChapter, (lines) =>
           lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
         );
         ok++;
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
       } catch (e) {
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
         log("generate", "生成失败", {
           lineId: line.id,
           speaker: line.speaker,
@@ -1534,6 +1649,7 @@ export default function Studio({
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
       } finally {
         finished++;
+        setGenProgress({ done: finished, total: targets.length });
       }
     });
 
@@ -1565,39 +1681,78 @@ export default function Studio({
     let ok = 0;
     let fail = 0;
     let finished = 0;
+    let retried = 0;
     const limit = generationLimit(targets);
+    setGenProgress({ done: 0, total: targets.length });
 
     await runPool(targets, limit, async (line) => {
       if (genStopRef.current) return;
+      const statusKey = lineStatusKey(originChapter, line.id);
       setGenMsg(`正在生成 ${finished + 1}/${targets.length} · 第 ${line.id} 句 · ${line.speaker}`);
+      markGenTarget(line);
+      setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
       try {
-        const url = await synthesizeLine(line);
+        const url = await withTimeout(
+          synthesizeLine(line),
+          240000,
+          "生成超时（4 分钟），请检查网络或引擎后重试"
+        );
         saveChapterLines(originChapter, (lines) =>
           lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
         );
         ok++;
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
       } catch (e) {
         fail++;
         failedLines.push(line);
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
+        log("generate", "生成失败", {
+          lineId: line.id,
+          speaker: line.speaker,
+          error: (e as Error).message,
+        });
         setGenMsg(`第 ${line.id} 句失败：${(e as Error).message}`);
       } finally {
         finished++;
+        setGenProgress({ done: finished, total: targets.length });
       }
     });
 
     if (!genStopRef.current && failedLines.length) {
-      await runPool(failedLines, generationLimit(failedLines), async (line) => {
+      // 失败大多来自云端限流：重试改成串行并留出间隔，避免并发再次撞限。
+      const retryTotal = failedLines.length;
+      let retryDone = 0;
+      setGenProgress({ done: 0, total: retryTotal });
+      await runPool(failedLines, 1, async (line) => {
         if (genStopRef.current) return;
-        setGenMsg(`重试第 ${line.id} 句 · ${line.speaker}`);
+        const statusKey = lineStatusKey(originChapter, line.id);
+        setGenMsg(`重试第 ${line.id} 句 · ${line.speaker}（${retryDone + 1}/${retryTotal}）`);
+        markGenTarget(line);
+        setLineStatus((prev) => ({ ...prev, [statusKey]: "generating" }));
+        await sleep(700);
         try {
-          const url = await synthesizeLine(line);
+          const url = await withTimeout(
+            synthesizeLine(line),
+            240000,
+            "生成超时（4 分钟），请检查网络或引擎后重试"
+          );
           saveChapterLines(originChapter, (lines) =>
             lines.map((l) => (l.id === line.id ? applyGeneratedAudio(l, line, url) : l)), undefined, false
           );
           ok++;
           fail--;
-        } catch {
-          /* 仍然失败，保留 */
+          retried++;
+          setLineStatus((prev) => ({ ...prev, [statusKey]: "" }));
+        } catch (e) {
+          setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
+          log("generate", "重试仍失败", {
+            lineId: line.id,
+            speaker: line.speaker,
+            error: (e as Error).message,
+          });
+        } finally {
+          retryDone++;
+          setGenProgress({ done: retryDone, total: retryTotal });
         }
       });
     }
@@ -1613,8 +1768,12 @@ export default function Studio({
     }
 
     setGenState(fail ? "error" : "done");
-    setGenMsg(`完成 ${ok} 句${fail ? ` · 失败 ${fail} 句` : ""}`);
-    log("generate", "批量生成完成", { ok, fail, total: targets.length });
+    setGenMsg(
+      fail
+        ? `完成 ${ok} 句 · 重试成功 ${retried} 句 · 仍失败 ${fail} 句`
+        : `完成 ${ok} 句${retried ? ` · 重试成功 ${retried} 句` : ""}`
+    );
+    log("generate", "批量生成完成", { ok, fail, retried, total: targets.length });
   }
 
   function stopGenerate() {
@@ -1801,6 +1960,40 @@ export default function Studio({
             </div>
           </div>
 
+          {genState === "generating" && (
+            <div className="gen-banner" role="status" aria-live="polite">
+              <span className="gen-spinner" />
+              <div className="gen-banner-text">
+                <b>{genMsg || "正在生成配音…"}</b>
+                <span>
+                  {genTarget
+                    ? `${genTarget.engine} · 第 ${genTarget.id} 句 · ${genTarget.speaker}`
+                    : "准备中…"}
+                  {cancelableGen ? " · 长时间没变化可停止后重试" : ""}
+                </span>
+              </div>
+              {genProgress.total > 0 && (
+                <div className="gen-banner-bar" aria-hidden="true">
+                  <i
+                    style={{
+                      width: `${Math.round(
+                        (genProgress.done / Math.max(1, genProgress.total)) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+              <span className="gen-banner-num">
+                {genProgress.total > 0 ? `${genProgress.done}/${genProgress.total}` : "—"}
+              </span>
+              {cancelableGen && (
+                <button className="btn small" onClick={stopGenerate}>
+                  停止
+                </button>
+              )}
+            </div>
+          )}
+
           <div className={`script ${view === "lines" ? "" : "hidden"}`}>
             <div className="inner">
               <div className="add-line add-line-top">
@@ -1810,7 +2003,7 @@ export default function Studio({
                 <div
                   key={line.id}
                   id={`line-${line.id}`}
-                  className={`line ${current === line.id ? "current" : ""}`}
+                  className={`line ${current === line.id ? "current" : ""} ${flashLine === line.id ? "flash" : ""}`}
                   tabIndex={0}
                   aria-current={current === line.id ? "true" : undefined}
                   onClick={() => {
@@ -2060,6 +2253,7 @@ export default function Studio({
                 value={audioRate}
                 onChange={(e) => {
                   const rate = Number(e.target.value);
+                  audioRateRef.current = rate;
                   setAudioRate(rate);
                   if (audioRef.current) audioRef.current.playbackRate = rate;
                 }}
@@ -2146,7 +2340,7 @@ export default function Studio({
 
                 <div className="right-title">
                   <span className="section-label">生成参数</span>
-                  <span className="kbd">IndexTTS 2.5</span>
+                  <span className="kbd">{selectedEngine.engine}</span>
                 </div>
 
                 <div className="field">
@@ -2328,12 +2522,14 @@ export default function Studio({
                 })}
               </div>
 
-              <div className="right-block">
+              <div className={`right-block gen-card ${genState === "generating" ? "active" : ""}`}>
                 <div className="right-title"><span className="section-label">本次生成</span></div>
                 <div className="engine-note">
-                  <b>{selectedCast?.cloudVoice ? "小米云 TTS" : "IndexTTS 2.5"}</b>
-                  {selectedCast?.cloudVoice ? " · 云端生成，保留本地音频" : " · 本地或远端 Gradio"}<br />
-                  并发按音色自动调整 · 只跑待生成或改动过的句子
+                  <b>{genEngine.engine}</b>
+                  {genEngine.cloud ? " · 云端生成，保留本地音频" : " · 本地或远端 Gradio"}<br />
+                  {genTarget
+                    ? `第 ${genTarget.id} 句 · ${genTarget.speaker}`
+                    : "并发按音色自动调整 · 只跑待生成或改动过的句子"}
                   {genMsg && (
                     <div style={{ marginTop: 6, color: genState === "error" ? "var(--danger)" : "var(--teal)" }}>
                       {genMsg}

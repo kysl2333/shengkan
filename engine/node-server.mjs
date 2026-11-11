@@ -639,8 +639,33 @@ const server = http.createServer(async (req, res) => {
         : name.endsWith(".zip")
           ? "application/zip"
           : "audio/wav";
-      res.writeHead(200, { "Content-Type": type, "Access-Control-Allow-Origin": "*" });
-      return res.end(fs.readFileSync(p));
+      const size = fs.statSync(p).size;
+      const range = req.headers.range;
+      // 支持 Range，播放器拖动进度条时浏览器会发 206 请求；不支持会退回整文件。
+      if (range) {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
+        if (m) {
+          const start = m[1] ? Number(m[1]) : 0;
+          const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+          if (Number.isFinite(start) && start <= end) {
+            res.writeHead(206, {
+              "Content-Type": type,
+              "Accept-Ranges": "bytes",
+              "Content-Range": `bytes ${start}-${end}/${size}`,
+              "Content-Length": end - start + 1,
+              "Access-Control-Allow-Origin": "*",
+            });
+            return fs.createReadStream(p, { start, end }).pipe(res);
+          }
+        }
+      }
+      res.writeHead(200, {
+        "Content-Type": type,
+        "Accept-Ranges": "bytes",
+        "Content-Length": size,
+        "Access-Control-Allow-Origin": "*",
+      });
+      return fs.createReadStream(p).pipe(res);
     }
 
     if (url.pathname === "/v1/audio-delete" && req.method === "POST") {

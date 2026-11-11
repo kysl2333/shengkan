@@ -13,6 +13,9 @@
  * 8. 选中台词切原文会定位并高亮对应段
  * 9. 规则重拆保留文字相同的角色和音频
  * 10. AI 标注时显示思考过程
+ * 11. 生成参数显示实际音色引擎
+ * 12. 连续试听跳过缺音频的句子并跟随当前句
+ * 13. 云端失败后串行重试并汇报结果
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -32,7 +35,7 @@ const project = {
   settings: { engine: "http://127.0.0.1:8290" },
   casts: [
     { id: "cast-dup", name: "旁白", initial: "旁", desc: "待匹配音色", voice: "", voicePath: "", color: "#2f6b57" },
-    { id: "cast-dup", name: "沈砚", initial: "沈", desc: "待匹配音色", voice: "", voicePath: "", color: "#a9763c" },
+    { id: "cast-dup", name: "沈砚", initial: "沈", desc: "待匹配音色", voice: "", voicePath: "", color: "#a9763c", cloudModel: "mimo-v2.5-tts", cloudVoice: "测试云", cloudName: "测试云" },
   ],
   chapters: [
     {
@@ -41,7 +44,8 @@ const project = {
       source: "第一句\n\n第二句",
       lines: [
         { id: 1, speaker: "旁白", text: "第一句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 1 },
-        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 2 },
+        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "done", audio: "line2.wav", paragraph: 2 },
+        { id: 3, speaker: "旁白", text: "重试测试句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 3 },
       ],
     },
     {
@@ -140,7 +144,17 @@ async function installStubs(win) {
         }
         if (u.includes("/v1/tts")) {
           window.__fetchLog.tts += 1;
-          await new Promise((resolve) => setTimeout(resolve, 1200));
+          let ttsText = "";
+          try { ttsText = JSON.parse(init && init.body ? init.body : "{}").text || ""; } catch {}
+          if (ttsText.includes("重试测试句") && !window.__retryOnce) {
+            window.__retryOnce = true;
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            return new Response(JSON.stringify({ error: "mock 限流" }), {
+              status: 429,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
           return jsonResponse({ ok: true, file: "mock.wav", url: "/v1/audio/mock.wav" });
         }
         if (u.includes("/v1/split")) {
@@ -382,6 +396,73 @@ app.whenReady().then(async () => {
   );
   check("AI 标注显示思考过程", thinkingShown === true, `shown=${thinkingShown}`);
   await wait(600);
+
+  // 11. 生成参数显示实际音色引擎
+  await reload(win);
+  await clickChapter(win, "第二章");
+  await wait(300);
+  const engineLabel = await evalJs(
+    win,
+    `([...document.querySelectorAll('.right-title')].find(x => x.textContent.includes('生成参数'))?.querySelector('.kbd')?.textContent || '').trim()`
+  );
+  check("生成参数显示实际引擎", engineLabel.includes("小米云 TTS"), engineLabel);
+
+  // 12. 连续试听跳过没音频的句子，并跟随当前句高亮
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(250);
+  await evalJs(win, `document.querySelectorAll('.line')[0].click()`);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.studio-head .seg button')].find(x => x.textContent.includes('连续')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(100);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.studio-head button')].find(x => x.textContent.includes('连续试听')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(450);
+  const followed = await evalJs(
+    win,
+    `document.querySelectorAll('.line')[1].classList.contains('current')`
+  );
+  const flashed = await evalJs(
+    win,
+    `document.querySelectorAll('.line')[1].classList.contains('flash')`
+  );
+  check(
+    "连续试听跳过缺音频并跟随当前句",
+    followed === true && flashed === true,
+    `current=${followed} flash=${flashed}`
+  );
+
+  // 13. 云端失败后串行重试并汇报结果
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(250);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.studio-head button')].find(x => x.textContent.includes('生成配音')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(250);
+  await evalJs(
+    win,
+    `(() => { const b = document.querySelector('.gen-dialog .edit-option'); if (b) b.click(); return !!b; })()`
+  );
+  await wait(6000);
+  const retryDone = await evalJs(
+    win,
+    `document.querySelectorAll('.line')[2].textContent.includes('已生成')`
+  );
+  const retryMsg = await evalJs(
+    win,
+    `([...document.querySelectorAll('.engine-note')].pop()?.textContent || '').trim()`
+  );
+  check(
+    "失败后串行重试并汇报结果",
+    retryDone === true && retryMsg.includes("重试成功 1 句"),
+    `done=${retryDone} msg=${retryMsg.replace(/\s+/g, " ").slice(0, 60)}`
+  );
 
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\nRESULT ${failed === 0 ? "GREEN" : "RED"} ${results.length - failed}/${results.length}`);
