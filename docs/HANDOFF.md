@@ -32,7 +32,7 @@
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
-| Git | 已初始化。`main` 已合并 `optimize/next-2`；当前 UI 重构分支 `design/ui-refresh` |
+| Git | 已初始化。`design/ui-refresh` 已合并到 `main`；`optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理，只保留 `main` |
 
 ## 事故说明
 

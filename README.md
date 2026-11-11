@@ -49,10 +49,10 @@ npm.cmd run check:studio
 
 ## 版本管理
 
-仓库主分支是 `main`，当前 UI 与逻辑修复分支是 `design/ui-refresh`（`optimize/next-2` 已合并到 `main`）。
+仓库主分支是 `main`；`design/ui-refresh` 已合并，`optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理。
 
 ```powershell
-git switch design/ui-refresh
+git switch main
 git status
 git commit -am "fix: 说明改了什么"
 ```

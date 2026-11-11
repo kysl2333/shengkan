@@ -22,6 +22,7 @@
 - AI 分析菜单、进度框和确认弹窗补充「2–10 分钟，准确度更高」的提醒，降低等待焦虑
 - 自定义文本 AI 增加「思考强度」：`customThinking.enabled` 为真才发送 `reasoning_effort`，不勾选完全不传
 - 设置页只在自定义服务商下显示这个选项；TTS 不参与
+- `design/ui-refresh` 合并到 `main`，删除已合并的 `optimize/next`、`optimize/next-2`、`optimize/next-3`
 
 ### 验证
 
