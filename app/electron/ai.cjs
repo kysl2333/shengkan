@@ -473,21 +473,23 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 10. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
 11. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
 12. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
-13. 思考过程用简体中文，只列关键疑点：谁在场、称呼指向谁、是不是设备里的声音、哪些句子拿不准。不要复述原文，不要逐句解释，不要写完整推理报告。
-14. 只返回需要修改的句子，不要返回全部，也不要返回你的思考过程。
+13. 思考时用简体中文，只列关键疑点，最多 20 条、总长度控制在 500 字以内。禁止逐句罗列 id、角色、情绪、语速，禁止在思考里预演完整 JSON。
+14. before / after 只是相邻句子的上下文，用来判断指代和语气，不要返回它们的 id；只返回 lines 里需要修改的句子。
+15. 只返回需要修改的句子，不要返回全部，也不要返回你的思考过程。
 
 只返回 JSON，不要解释：
 {"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
 
 const ANNOTATE_MAX_CHARS = 60000;
+const ANNOTATE_MAX_LINES = 220;
 
-function chunkForAnnotation(lines, maxChars = ANNOTATE_MAX_CHARS) {
+function chunkForAnnotation(lines, maxChars = ANNOTATE_MAX_CHARS, maxLines = ANNOTATE_MAX_LINES) {
   const chunks = [];
   let current = [];
   let size = 0;
   for (const line of lines) {
     const cost = String(line.text || "").length + 48;
-    if (current.length && size + cost > maxChars) {
+    if (current.length && (size + cost > maxChars || current.length >= maxLines)) {
       chunks.push(current);
       current = [];
       size = 0;
@@ -504,8 +506,14 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
   if (!list.length) return { changes: [], cancelled: false, nextBatch: 0, usage: emptyUsage() };
 
   const names = (casts || []).map((c) => (typeof c === "string" ? c : c?.name)).filter(Boolean);
-  // 默认整章一次交给 AI；只有超出上下文预算的长章才按字符切段。
+  // 默认整章一次交给 AI；只有超出上下文预算的长章才按字符/行数切段。
   const chunks = chunkForAnnotation(list);
+  const ranges = [];
+  let offset = 0;
+  for (const chunk of chunks) {
+    ranges.push({ start: offset, end: offset + chunk.length });
+    offset += chunk.length;
+  }
 
   const changes = [];
   let usage = emptyUsage();
@@ -530,10 +538,14 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
           : `AI 正在分析第 ${i + 1}/${chunks.length} 段（${chunks[i].length} 句）…`,
       });
 
+      const brief = (l) => ({ id: l.id, speaker: l.speaker, text: l.text });
+      const range = ranges[i] || { start: 0, end: chunks[i].length };
       const payload = {
         context: String(context || ""),
         casts: names,
-        lines: chunks[i].map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
+        before: list.slice(Math.max(0, range.start - 8), range.start).map(brief),
+        lines: chunks[i].map(brief),
+        after: list.slice(range.end, range.end + 8).map(brief),
       };
 
       const { data, usage: chunkUsage } = await chatJSON(

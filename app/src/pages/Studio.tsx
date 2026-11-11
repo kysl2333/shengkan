@@ -930,7 +930,12 @@ export default function Studio({
     setAiThinking("");
     startAiClock();
     setAiProgress({ done: 0, total: 1 });
-    addLog(`整章交给 AI：${script.length} 句 · ${castList.length} 个角色 · 开启思考`);
+    const segments = Math.max(1, Math.ceil(script.length / 220));
+    addLog(
+      `整章交给 AI：${script.length} 句 · ${castList.length} 个角色 · 开启思考${
+        segments > 1 ? ` · 分 ${segments} 段` : ""
+      }`
+    );
     let failed = false;
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
