@@ -1877,7 +1877,8 @@ textarea.input {
   height: 34px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  padding: 0 1px;
   overflow: hidden;
   min-width: 0;
   cursor: pointer;
@@ -1890,8 +1891,46 @@ textarea.input {
   flex: 1 1 0;
   min-width: 1px;
   background: var(--line-strong);
-  border-radius: 1px;
-  transition: background-color 0.18s linear;
+  border-radius: 2px;
+  opacity: 0.55;
+  transition: background-color 0.12s linear, opacity 0.12s linear;
+}
+
+.wave:hover i {
+  opacity: 0.75;
+}
+
+.wave i.peak {
+  background: var(--ink-4);
+  opacity: 0.7;
+}
+
+.wave i.played {
+  background: var(--brass);
+  opacity: 0.95;
+}
+
+.wave i.played.peak {
+  background: var(--brass-text);
+}
+
+.wave-head {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateX(-1px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+  z-index: 1;
+}
+
+.wave:hover .wave-head,
+.player.playing .wave-head {
+  opacity: 0.9;
 }
 
 .wave-seek {
@@ -1906,18 +1945,6 @@ textarea.input {
   z-index: 2;
   -webkit-appearance: none;
   appearance: none;
-}
-
-.wave i.played {
-  background: var(--brass);
-}
-
-.wave i.peak {
-  background: var(--ink-4);
-}
-
-.wave i.played.peak {
-  background: var(--brass);
 }
 
 .player-right {

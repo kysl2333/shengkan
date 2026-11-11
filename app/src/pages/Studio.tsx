@@ -188,7 +188,6 @@ export default function Studio({
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
-  const [audioRate, setAudioRate] = useState(1);
   const [auditionMode, setAuditionMode] = useState<"single" | "continuous">("single");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioRateRef = useRef(1);
@@ -380,11 +379,15 @@ export default function Studio({
 
   const wave = useMemo(
     () =>
-      Array.from({ length: 120 }, (_, i) => {
-        const t = i / 120;
-        const env = Math.sin(t * Math.PI) * 0.6 + 0.4;
-        const h = 3 + Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.7)) * 24 * env;
-        return { h, peak: h > 22 };
+      Array.from({ length: 260 }, (_, i) => {
+        const t = i / 260;
+        const env = 0.45 + Math.sin(t * Math.PI) * 0.55;
+        const grain =
+          Math.abs(Math.sin(i * 0.83) * 0.55) +
+          Math.abs(Math.sin(i * 0.27 + 1.3) * 0.3) +
+          Math.abs(Math.sin(i * 1.9) * 0.15);
+        const h = 2 + grain * 25 * env;
+        return { h: Math.round(h * 10) / 10, peak: h > 22 };
       }),
     []
   );
@@ -2281,6 +2284,17 @@ export default function Studio({
                 }}
                 aria-label="播放进度"
               />
+              <span
+                className="wave-head"
+                style={{
+                  left: `${
+                    audioDuration > 0
+                      ? Math.min(100, Math.max(0, (audioTime / audioDuration) * 100))
+                      : 0
+                  }%`,
+                }}
+                aria-hidden="true"
+              />
             </div>
             <div className="player-right">
               <span className="queue">
@@ -2289,11 +2303,10 @@ export default function Studio({
               </span>
               <select
                 className="select speed-select"
-                value={audioRate}
+                defaultValue={audioRateRef.current}
                 onChange={(e) => {
                   const rate = Number(e.target.value);
                   audioRateRef.current = rate;
-                  setAudioRate(rate);
                   if (audioRef.current) applyPlaybackRate(audioRef.current);
                 }}
                 title="播放倍速"
