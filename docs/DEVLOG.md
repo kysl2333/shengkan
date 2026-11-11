@@ -11,7 +11,9 @@
 - `loadAndPlay` 遇到相同 `audioSrc` 会切暂停/继续，队列里重复 URL 时可能触发旧的 `onended`，表现成同一句反复播
 - 播放倍速在点击试听时被闭包捕获，换下一句仍用旧值
 - 每句都 `new Audio(src)`，换句的 `play()` 不在用户手势里，Electron/Chromium 的自动播放策略会把下一句暂停
+- `useEffect(..., [current])` 里无条件 `pause()`；连续试听每切一句都会改 `current`，刚播放的下一句立刻被这个 effect 暂停
 - `audio.load()` 会把 `playbackRate` 重置回 `defaultPlaybackRate`，只在 load 前设置一次会被冲掉
+- 波形只画了 120 根固定宽度竖条，占不满播放器宽度；点击映射却按整条宽度算，点在竖条上会跳错位置
 - `switchAudio` 只改数据，没有提示、没有闪烁、也不播放，看起来像点了没反应
 - `/v1/audio/` 一次性 `readFileSync` 返回整文件，不支持 Range，浏览器拖动进度条时会重新拉流
 
@@ -28,14 +30,16 @@
 - 新增台词的滚动/闪烁效果，复用 `source-flash` 动画
 - `loadAndPlay` 增加 `force` 参数，连续换句不再触发同源暂停/继续
 - 全局只创建一个 `Audio` 元素，换句只改 `src`，避免下一句被自动播放策略暂停
+- `[current]` effect 在连续播放时跳过暂停；靠 `continuousRef` 区分手动切句和自动切句
+- 波形竖条改成 flex 铺满，并叠加透明 `<input type="range">`，整条都能点/拖
 - 倍速用 `audioRateRef` + `defaultPlaybackRate`，在 `load()` 后和 `onplay` 时重新应用
 - `switchAudio` 增加 toast、当前行闪烁和自动播放上一版
 - Node 音频接口支持 `Range`，返回 206 和 `Content-Range`
 
 ### 验证
 
-- `npm.cmd run check:studio` 19/19
-- 新增「生成参数显示实际引擎」「连续试听跳过缺音频并跟随当前句」「失败后串行重试并汇报结果」「切换历史配音有反馈」「连续换句保持倍速且复用同一个音频元素」
+- `npm.cmd run check:studio` 20/20
+- 新增「生成参数显示实际引擎」「连续试听跳过缺音频并跟随当前句」「失败后串行重试并汇报结果」「切换历史配音有反馈」「连续换句保持倍速且复用同一个音频元素」「连续试听自动播完整条队列」
 - Range 测试：完整请求 200 / 38444 字节；`Range: bytes=1000-1999` 返回 206 / 1000 字节
 - 截图确认生成横幅和右栏实际引擎
 
@@ -48,6 +52,8 @@
 - 播放倍速要用 ref，React 闭包里的 `audioRate` 在长队列里会一直是开始时的值
 - 音频拖动依赖 Range；没有 206 时浏览器可能重新请求整个文件
 - 连续播放不要每句 `new Audio`；换 src 复用同一个元素才不会被自动播放策略打断
+- 任何监听 `current` 的 effect 都不能无条件 `pause()`，连续播放自己会改 `current`
+- 波形点击区域要和视觉宽度一致；只画固定宽度竖条会让点击映射错位
 - `load()` 会重置倍速，必须同时设置 `defaultPlaybackRate`，并在 `onplay` 再兜一次
 - 任何“切换/回退”操作都要有可见反馈，否则用户会以为按钮坏了
 

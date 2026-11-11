@@ -158,6 +158,9 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 生成引擎标签必须按目标台词绑定的 `cast` 计算，不能用当前选中的 `selectedCast`；用户会在生成过程中点别的台词。
 - 批量生成每句完成要立即更新 `script`；`saveChapterLines(persist=false)` 只是不落盘，不代表不刷新界面。
 - 连续试听按 `ProjectLine` 排队，跳过没有音频的句子；每句切换要 `setCurrent`、滚动到对应行并闪烁。播放倍速用 ref，换音频后重新应用。
+- 不要在任何 `[current]` effect 里无条件暂停音频；连续试听会自己切换 `current`，要用 `continuousRef` 之类的标记跳过。
+- 播放器波形的视觉宽度必须铺满点击区域，最好叠加透明 `range` 覆盖整条；不要只在左侧画固定宽度竖条。
+- Electron 窗口要设置 `autoplayPolicy: "no-user-gesture-required"`，否则连续播放下一句可能被自动播放策略暂停。
 - 换音频只改同一个 `HTMLAudioElement` 的 `src`，不要每句 `new Audio`；`load()` 会重置倍速，必须同时设置 `defaultPlaybackRate` 并在 `onplay` 再应用一次。
 - 切换历史配音、回退音频版本必须有可见反馈：toast、当前行闪烁，并自动播放切换后的版本。
 - 音频接口必须支持 HTTP Range；不支持 206 时浏览器拖动进度条会重新拉整个文件。

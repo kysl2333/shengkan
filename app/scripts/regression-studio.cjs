@@ -18,6 +18,7 @@
  * 13. 云端失败后串行重试并汇报结果
  * 14. 切换历史配音有反馈
  * 15. 连续换句保持倍速且复用同一个音频元素
+ * 16. 连续试听自动播完整条队列
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -519,6 +520,73 @@ app.whenReady().then(async () => {
     "连续换句保持倍速且复用同一个音频元素",
     rate1 === 3 && rate2 === 3 && audioCount === 1,
     `rate1=${rate1} rate2=${rate2} count=${audioCount}`
+  );
+
+  // 16. 连续试听自动播完整条队列
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(250);
+  await evalJs(
+    win,
+    `(() => {
+      class FakeAudio {
+        constructor() {
+          this.src = "";
+          this.paused = true;
+          this.currentTime = 0;
+          this.duration = 2;
+          this.playbackRate = 1;
+          this.defaultPlaybackRate = 1;
+          this._token = 0;
+          window.__audioCount = (window.__audioCount || 0) + 1;
+          window.__lastAudio = this;
+        }
+        play() {
+          this.paused = false;
+          if (this.onplay) this.onplay();
+          const token = ++this._token;
+          setTimeout(() => {
+            if (token === this._token && !this.paused) {
+              this.currentTime = this.duration;
+              if (this.onended) this.onended();
+            }
+          }, 90);
+          return Promise.resolve();
+        }
+        pause() {
+          this.paused = true;
+          if (this.onpause) this.onpause();
+        }
+        load() {}
+      }
+      window.Audio = FakeAudio;
+      return true;
+    })()`
+  );
+  await evalJs(win, `document.querySelectorAll('.line')[0].click()`);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.studio-head .seg button')].find(x => x.textContent.includes('连续')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(100);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.studio-head button')].find(x => x.textContent.includes('连续试听')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(450);
+  const contCurrent = await evalJs(
+    win,
+    `document.querySelectorAll('.line')[3].classList.contains('current')`
+  );
+  const contSrc = await evalJs(win, `window.__lastAudio?.src || ''`);
+  const contState = await evalJs(
+    win,
+    `JSON.stringify({ src: window.__lastAudio?.src, paused: window.__lastAudio?.paused, token: window.__lastAudio?._token, count: window.__audioCount, msg: document.querySelector('.right-block .engine-note')?.textContent || '' })`
+  );
+  check(
+    "连续试听自动播完整条队列",
+    contCurrent === true && contSrc.includes("line4.wav"),
+    `current=${contCurrent} src=${contSrc} state=${contState}`
   );
 
   const failed = results.filter((r) => !r.pass).length;

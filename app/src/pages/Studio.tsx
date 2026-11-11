@@ -318,6 +318,8 @@ export default function Studio({
   }, [aiMenuOpen]);
 
   useEffect(() => {
+    // 连续试听自己会切 current，不能在这里把刚加载的下一句暂停。
+    if (continuousRef.current) return;
     audioRef.current?.pause();
     setAudioPlaying(false);
   }, [current]);
@@ -1445,9 +1447,10 @@ export default function Studio({
     setAudioPlaying(true);
     audio.load();
     applyPlaybackRate(audio);
-    audio.play().catch(() => {
+    audio.play().catch((e) => {
       setAudioPlaying(false);
       setGenMsg("播放被浏览器拦住了，再点一次播放键");
+      log("audio", "播放失败", { src, error: (e as Error).message });
     });
   }
 
@@ -1469,10 +1472,12 @@ export default function Studio({
   function playContinuous(queue: ProjectLine[], index: number) {
     if (index >= queue.length) {
       continuousRef.current = null;
+      setGenMsg("连续试听播放完毕");
       return;
     }
     const line = queue[index];
     continuousRef.current = { queue, index };
+    log("audio", "连续试听切到下一句", { index: index + 1, total: queue.length, lineId: line.id });
     setCurrent(line.id);
     setFlashLine(line.id);
     loadAndPlay(audioUrl(line.audio!), () => playContinuous(queue, index + 1), true);
@@ -1499,26 +1504,6 @@ export default function Studio({
     continuousRef.current = null;
     if (line.audio) loadAndPlay(audioUrl(line.audio));
     else setGenMsg(`第 ${line.id} 句还没有生成音频`);
-  }
-
-  function seekAudio(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const duration = audioRef.current?.duration;
-    if (
-      audioRef.current &&
-      typeof duration === "number" &&
-      Number.isFinite(duration) &&
-      duration > 0
-    ) {
-      const target = pct * duration;
-      try {
-        audioRef.current.currentTime = target;
-        setAudioTime(target);
-      } catch {
-        setGenMsg("音频还没加载完，稍后再拖动");
-      }
-    }
   }
 
   function markGenTarget(line: ProjectLine) {
@@ -2266,7 +2251,7 @@ export default function Studio({
               {audioPlaying ? "❚❚" : "▶"}
             </button>
             <span className="time">{formatClock(audioTime)} / {formatClock(audioDuration)}</span>
-            <div className="wave" onClick={seekAudio} title="点击跳转">
+            <div className="wave" title="点击或拖动跳转">
               {wave.map((b, i) => {
                 const played = audioDuration > 0 && i / wave.length <= audioTime / audioDuration;
                 return (
@@ -2277,6 +2262,25 @@ export default function Studio({
                   />
                 );
               })}
+              <input
+                type="range"
+                className="wave-seek"
+                min={0}
+                max={audioDuration > 0 ? audioDuration : 0}
+                step={0.01}
+                value={audioDuration > 0 ? Math.min(audioTime, audioDuration) : 0}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (!audioRef.current || !Number.isFinite(value)) return;
+                  try {
+                    audioRef.current.currentTime = value;
+                    setAudioTime(value);
+                  } catch {
+                    setGenMsg("音频还没加载完，稍后再拖动");
+                  }
+                }}
+                aria-label="播放进度"
+              />
             </div>
             <div className="player-right">
               <span className="queue">
