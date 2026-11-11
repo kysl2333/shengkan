@@ -298,6 +298,21 @@ def split_block(block: str, paragraph: int = 1):
     return segments
 
 
+def merge_continuations(segments):
+    out = []
+    for seg in segments:
+        prev = out[-1] if out else None
+        if prev and prev["speaker"] == "旁白" and seg["speaker"] == "旁白":
+            tail = re.sub(r"[”」』\"'）)\]】]+$", "", prev["text"].strip())
+            opens = re.match(r"^[“「『\"'的之地得，,、；;：:）)】\]》」』]", seg["text"].strip())
+            if not re.search(r"[。！？!?…：:；;]$", tail) and opens:
+                prev["text"] += seg["text"]
+                prev["confidence"] = min(prev["confidence"], seg["confidence"])
+                continue
+        out.append(dict(seg))
+    return out
+
+
 @app.post("/v1/split")
 def split(req: SplitRequest):
     text = req.text.strip()
@@ -310,6 +325,8 @@ def split(req: SplitRequest):
         if not block:
             continue
         segments.extend(split_block(block, paragraph))
+
+    segments = merge_continuations(segments)
 
     return {
         "segments": segments,

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getVoices, splitText, synthesize, audioUrl, deleteAudio } from "../api";
+import { getVoices, splitText, synthesize, audioUrl, deleteAudio, type Segment } from "../api";
 import { annotateLines, cancelAi, onAiProgress, extractCasts, emptyAiUsage, addAiUsage } from "../ai";
 import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
@@ -50,6 +50,60 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
     }
   });
   await Promise.all(workers);
+}
+
+function segmentsToLines(segments: Segment[]): ProjectLine[] {
+  return segments.map((s, index) => ({
+    id: index + 1,
+    speaker: s.speaker,
+    paragraph: s.paragraph,
+    text: s.text,
+    emotion: s.emotion || "平静",
+    speed: 1,
+    status: "pending" as const,
+    audio: "",
+  }));
+}
+
+// 规则重拆只换断句：文字完全相同的旧台词沿用原来的角色、情绪、语速和音频，避免重拆后全变旁白。
+function carryOverLines(fresh: ProjectLine[], oldLines: ProjectLine[]) {
+  const buckets = new Map<string, ProjectLine[]>();
+  for (const line of oldLines) {
+    const key = line.text.trim();
+    if (!key) continue;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(line);
+    else buckets.set(key, [line]);
+  }
+
+  const kept = new Set<ProjectLine>();
+  const lines = fresh.map((line) => {
+    const match = buckets.get(line.text.trim())?.shift();
+    if (!match) return line;
+    kept.add(match);
+    return {
+      ...line,
+      speaker:
+        match.speaker === "未知" && line.speaker !== "未知" ? line.speaker : match.speaker,
+      emotion: match.emotion || line.emotion,
+      speed: match.speed ?? line.speed,
+      status: match.status === "dirty" ? ("dirty" as const) : match.audio ? ("done" as const) : ("pending" as const),
+      audio: match.audio,
+      audioHistory: match.audioHistory,
+      note: match.note,
+    };
+  });
+
+  const keptAudio = new Set<string>();
+  for (const line of kept) {
+    if (line.audio) keptAudio.add(line.audio);
+    line.audioHistory?.forEach((file) => keptAudio.add(file));
+  }
+  const staleAudio = oldLines
+    .flatMap((line) => [line.audio, ...(line.audioHistory ?? [])])
+    .filter((file): file is string => Boolean(file && !keptAudio.has(file)));
+
+  return { lines, staleAudio };
 }
 
 export default function Studio({
@@ -667,7 +721,7 @@ export default function Studio({
       setGenMsg("这一章没有原文，导入时保留原文才能重新拆分");
       return;
     }
-    if (!window.confirm("重新拆分会用新结果替换这一章的台词，继续？")) return;
+    if (!window.confirm("规则重拆只按引号和分段断句，不调用 AI。文字完全相同的旧台词会保留原来的角色、情绪、语速和音频；新拆出的句子要再用「AI分析」或手动指派。继续？")) return;
 
     setTask("running");
     setLogs([]);
@@ -677,21 +731,12 @@ export default function Studio({
     try {
       const r = await splitText(source);
       addLog(`规则拆分完成：${r.count} 句`);
-      for (const old of chapter?.lines ?? []) {
-        if (old.audio) deleteAudio(old.audio);
-        old.audioHistory?.forEach((file) => deleteAudio(file));
-      }
-      const lines = r.segments.map((s, j) => ({
-        id: j + 1,
-        speaker: s.speaker,
-        paragraph: s.paragraph,
-        text: s.text,
-        emotion: s.emotion || "平静",
-        speed: 1,
-        status: "pending" as const,
-        audio: "",
-      }));
-      refineSpeakers(lines, (project?.casts ?? []).map((c) => c.name));
+      const fresh = segmentsToLines(r.segments);
+      refineSpeakers(fresh, (project?.casts ?? []).map((c) => c.name));
+      const { lines, staleAudio } = carryOverLines(fresh, chapter?.lines ?? []);
+      staleAudio.forEach((file) => deleteAudio(file));
+      const carried = lines.filter((line) => line.audio).length;
+      if (carried) addLog(`沿用 ${carried} 句已有角色、情绪和音频`);
 
       const base = project?.casts ?? [];
       const casts = [...base];
@@ -932,7 +977,7 @@ export default function Studio({
     if (blockWhileGenerating("整本重拆")) return;
     if (
       !skipConfirm &&
-      !window.confirm(`会重新拆分全部 ${project.chapters.length} 章，只按章节标记拆台词，不新增、不删除、不改名任何角色。继续？`)
+      !window.confirm(`会重新拆分全部 ${project.chapters.length} 章，只按章节标记拆台词，不新增、不删除、不改名任何角色；文字相同的台词保留角色、情绪、语速和音频。继续？`)
     ) {
       return;
     }
@@ -966,23 +1011,12 @@ export default function Studio({
         }
 
         const r = await splitText(src.source);
-        for (const old of src.lines) {
-          if (old.audio) deleteAudio(old.audio);
-          old.audioHistory?.forEach((file) => deleteAudio(file));
-        }
-        const lines: ProjectLine[] = r.segments.map((s, j) => ({
-          id: j + 1,
-          speaker: s.speaker,
-          paragraph: s.paragraph,
-          text: s.text,
-          emotion: s.emotion || "平静",
-          speed: 1,
-          status: "pending",
-          audio: "",
-        }));
-        for (const line of lines) {
+        const fresh = segmentsToLines(r.segments);
+        for (const line of fresh) {
           if (line.speaker !== "旁白" && !known.has(line.speaker)) line.speaker = "未知";
         }
+        const { lines, staleAudio } = carryOverLines(fresh, src.lines);
+        staleAudio.forEach((file) => deleteAudio(file));
 
         chapters.push({ ...src, lines });
         totalLines += lines.length;
@@ -1642,7 +1676,7 @@ export default function Studio({
                   }}
                 >
                   <b>规则重拆</b>
-                  <span>只按引号和分段拆句，不调用 AI</span>
+                  <span>只按引号和分段拆句，不调用 AI；相同文字保留原标注</span>
                 </button>
               </div>
             )}

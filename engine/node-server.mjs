@@ -382,6 +382,24 @@ function nameAfter(text) {
 
 const QUOTE_RE = /“([^”]*)”|「([^」]*)」|『([^』]*)』|"([^"]*)"/g;
 
+function mergeContinuationSegments(segments) {
+  const out = [];
+  for (const seg of segments) {
+    const prev = out[out.length - 1];
+    if (prev && prev.speaker === "旁白" && seg.speaker === "旁白") {
+      const tail = prev.text.trim().replace(/[”」』"'）)\]】]+$/, "");
+      const opensNext = /^[“「『"'的之地得，,、；;：:）)】\]》」』]/.test(seg.text.trim());
+      if (!/[。！？!?…：:；;]$/.test(tail) && opensNext) {
+        prev.text = `${prev.text}${seg.text}`;
+        prev.confidence = Math.min(prev.confidence, seg.confidence);
+        continue;
+      }
+    }
+    out.push({ ...seg });
+  }
+  return out;
+}
+
 function splitText(text) {
   const segments = [];
   const blocks = text.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
@@ -473,7 +491,7 @@ function splitText(text) {
     if (!quoted && !rest) continue;
   }
 
-  return segments;
+  return mergeContinuationSegments(segments);
 }
 
 const TARGET_SR = 24000;

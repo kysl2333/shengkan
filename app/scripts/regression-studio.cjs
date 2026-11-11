@@ -11,6 +11,7 @@
  * 6. 语速拖动只在松手后落盘
  * 7. 重复角色 id 只选中一个，绑定只作用于一个角色
  * 8. 选中台词切原文会定位并高亮对应段
+ * 9. 规则重拆保留文字相同的角色和音频
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -131,7 +132,12 @@ async function installStubs(win) {
           return jsonResponse({ ok: true, file: "mock.wav", url: "/v1/audio/mock.wav" });
         }
         if (u.includes("/v1/split")) {
-          return jsonResponse({ segments: [{ speaker: "旁白", text: "第一句", emotion: "平静", confidence: 1 }], count: 1, characters: 3, mode: "rule" });
+          let text = "";
+          try { text = JSON.parse(init && init.body ? init.body : "{}").text || ""; } catch {}
+          const body = text.trim() === "只有一句"
+            ? { segments: [{ speaker: "旁白", text: "只有一句", emotion: "平静", confidence: 1, paragraph: 1 }], count: 1 }
+            : { segments: [{ speaker: "旁白", text: "第一句", emotion: "平静", confidence: 1, paragraph: 1 }], count: 1 };
+          return jsonResponse({ ...body, characters: text.length, mode: "rule" });
         }
         if (u.includes("/health")) {
           return jsonResponse({ ok: true, engine: "stub", code_dir: "", model_dir: "", model_loaded: true });
@@ -321,6 +327,31 @@ app.whenReady().then(async () => {
   await wait(500);
   const flash = await evalJs(win, `document.querySelector('#source-p-2')?.classList.contains('flash')`);
   check("原文定位并高亮当前段", flash === true, `flash=${flash}`);
+
+  // 10. 规则重拆保留文字相同的角色和音频
+  await reload(win);
+  await clickChapter(win, "第二章");
+  await wait(200);
+  await evalJs(win, `document.querySelector('.ai-trigger')?.click()`);
+  await wait(150);
+  const splitClicked = await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.ai-menu button')].find(x => x.textContent.includes('规则重拆')); if (!b) return false; b.click(); return true; })()`
+  );
+  await wait(600);
+  const keptSpeaker = await evalJs(
+    win,
+    `[...document.querySelectorAll('.line')].some(x => x.textContent.includes('沈砚'))`
+  );
+  const deletedKeep = await evalJs(
+    win,
+    `window.__fetchLog.audioDeletes.filter(x => x === "keep-me.wav").length`
+  );
+  check(
+    "规则重拆保留相同文字的角色和音频",
+    splitClicked === true && keptSpeaker === true && deletedKeep === 0,
+    `speaker=${keptSpeaker} deleted=${deletedKeep}`
+  );
 
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\nRESULT ${failed === 0 ? "GREEN" : "RED"} ${results.length - failed}/${results.length}`);

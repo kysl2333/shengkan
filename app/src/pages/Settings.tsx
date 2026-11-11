@@ -619,7 +619,7 @@ export default function Settings() {
                 导入时优先尝试 AI 识别章节
               </div>
             </Row>
-            <Row label="台词拆分" help="当前用规则拆分：引号内识别为台词，其余为旁白。">
+            <Row label="台词拆分" help="断句始终用规则，保证原文一字不改；AI 只负责角色、情绪和语速。让 AI 断句容易改写原文或漏句，所以不提供。">
               <div className="test-result"><span className="dot ok" />规则拆分 · 不消耗 token</div>
             </Row>
           </div>
