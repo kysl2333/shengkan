@@ -1,5 +1,39 @@
 # 开发记录
 
+## 2026-11-11 · 整章 AI 标注、深度思考和思考过程展示
+
+### 根因
+
+- 标注按 60 句一批，模型看不到整章上下文，跨批的指代、连续对话和称呼容易判错
+- MiMo 的结构化任务之前显式关闭 thinking，标注只能靠普通生成；同时非流式请求拿不到 reasoning
+- 如果直接把 reasoning 和 content 拼在一起，思考内容会混进 JSON，导致解析失败
+- 整本/整章标注没有可视反馈，用户只能看到进度条，不知道模型在想什么
+
+### 完成
+
+- `annotateLines` 默认整章一次发送；超过 6 万字符才按字符切段，切段只作为超长章节的兜底
+- 标注请求开启 MiMo `thinking: enabled`、`stream: true`，并从 SSE 的 `delta.reasoning_content` 读取思考，从 `delta.content` 读取 JSON
+- `chatJSON` 增加流式解析、`stream_options.include_usage`、`finish_reason` 截断提示；非 SSE 响应自动回退到普通 JSON
+- 思考内容只通过 `onProgress.reasoning` 送到界面，不参与 JSON 解析；设置页新增「标注思考模式」开关，默认开
+- 工作台 AI 分析进度新增「思考过程」框，流式追加、自动滚到底部、最多保留 12000 字；不显示最终输出
+- 提示词要求模型只列关键疑点，不复述原文、不逐句解释，减少无意义的长思考
+- 移除按 60 句批次的续跑确认，停止后保留已完成段的结果
+
+### 验证
+
+- SSE mock：请求体包含 `thinking: enabled`、`stream: true`、`max_completion_tokens: 32768`；reasoning 与 JSON 分开，changes 和 usage 正常
+- `npm.cmd run check:studio` 14/14，新增「AI 标注显示思考过程」
+- 截图确认右栏思考框显示流式文字，且不显示最终结果
+- `node --check app/electron/ai.cjs`、`node --check engine/node-server.mjs`、`python -m py_compile engine/server.py` 通过
+
+### 坑
+
+- MiMo 在 thinking 模式下会强制使用 temperature 1.0 / top_p 0.95，传自定义值也不会生效，干脆不传
+- `max_completion_tokens` 同时包含思考和回答；长思考会挤掉 JSON 输出，必须留足额度并处理 `finish_reason: length`
+- SSE 的 `data:` 行可能被网络分片截断，必须按行缓冲后再 JSON.parse
+- reasoning 只能用于展示，不能写进台词、不能参与 JSON 解析；否则会把思考过程当成角色数据
+- 之前保存过自定义标注提示词的用户，需要点「恢复内置」才会用新的整章提示词
+
 ## 2026-11-11 · 跨段续句合并与规则重拆保留标注
 
 ### 根因

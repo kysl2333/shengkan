@@ -12,6 +12,7 @@
  * 7. 重复角色 id 只选中一个，绑定只作用于一个角色
  * 8. 选中台词切原文会定位并高亮对应段
  * 9. 规则重拆保留文字相同的角色和音频
+ * 10. AI 标注时显示思考过程
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -84,7 +85,18 @@ ipcMain.handle("ai:test", () => ({ ok: true, ms: 1, model: "mock" }));
 ipcMain.handle("ai:default-prompts", () => ({ chapter: "", annotate: "" }));
 ipcMain.handle("ai:cancel-detect", () => true);
 ipcMain.handle("ai:extract-casts", () => ({ casts: [], usage: { input: 0, output: 0, total: 0, cached: 0 } }));
-ipcMain.handle("ai:annotate-lines", () => ({ changes: [], cancelled: false, nextBatch: 0, usage: { input: 0, output: 0, total: 0, cached: 0 } }));
+ipcMain.handle("ai:annotate-lines", async (event) => {
+  if (!event.sender.isDestroyed()) {
+    event.sender.send("ai:progress", {
+      done: 0,
+      total: 1,
+      message: "AI 正在思考…",
+      reasoning: "先看第二句，说话人是沈砚。",
+    });
+  }
+  await wait(700);
+  return { changes: [], cancelled: false, nextBatch: 1, usage: { input: 1, output: 1, total: 2, cached: 0 } };
+});
 ipcMain.handle("cloud:list", () => []);
 ipcMain.handle("cloud:providers", () => []);
 ipcMain.handle("log:info", () => ({ file: "app.log", size: 1 }));
@@ -352,6 +364,24 @@ app.whenReady().then(async () => {
     splitClicked === true && keptSpeaker === true && deletedKeep === 0,
     `speaker=${keptSpeaker} deleted=${deletedKeep}`
   );
+
+  // 11. AI 标注时显示思考过程
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(200);
+  await evalJs(win, `document.querySelector('.ai-trigger')?.click()`);
+  await wait(150);
+  await evalJs(
+    win,
+    `(() => { const b = [...document.querySelectorAll('.ai-menu button')].find(x => x.textContent.includes('AI 标注角色')); if (b) b.click(); return !!b; })()`
+  );
+  await wait(350);
+  const thinkingShown = await evalJs(
+    win,
+    `document.querySelector('.ai-thinking-body')?.textContent?.includes('沈砚') === true`
+  );
+  check("AI 标注显示思考过程", thinkingShown === true, `shown=${thinkingShown}`);
+  await wait(600);
 
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\nRESULT ${failed === 0 ? "GREEN" : "RED"} ${results.length - failed}/${results.length}`);

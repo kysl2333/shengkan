@@ -4,6 +4,7 @@ export interface AiConfig {
   model: string;
   apiKey: string;
   autoChapter: boolean;
+  annotateThinking?: boolean;
   cloudProviders?: {
     mimo?: boolean;
   };
@@ -66,6 +67,7 @@ export interface AiProgress {
   done: number;
   total: number;
   message: string;
+  reasoning?: string;
 }
 
 export interface AnnotateInput {
@@ -106,6 +108,7 @@ const DEFAULTS: AiConfig = {
   model: "mimo-v2.6-flash",
   apiKey: "",
   autoChapter: true,
+  annotateThinking: true,
 };
 
 function bridge() {

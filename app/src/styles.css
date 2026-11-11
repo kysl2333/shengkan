@@ -2101,6 +2101,42 @@ textarea.input {
   margin-top: 9px;
 }
 
+.ai-thinking {
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.ai-thinking-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.ai-thinking-head span:first-child {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.ai-thinking-body {
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 8px 9px;
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+}
+
 .tool-menu {
   margin-top: 10px;
   border: none;

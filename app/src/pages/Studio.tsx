@@ -135,6 +135,8 @@ export default function Studio({
   const [annotating, setAnnotating] = useState(false);
   const [aiMsg, setAiMsg] = useState("");
   const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
+  const [aiThinking, setAiThinking] = useState("");
+  const thinkingBoxRef = useRef<HTMLDivElement>(null);
   const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [systemVoice, setSystemVoice] = useState("");
   const [lineMenu, setLineMenu] = useState<{ x: number; y: number; line: ProjectLine } | null>(null);
@@ -154,7 +156,6 @@ export default function Studio({
   const [genDialog, setGenDialog] = useState(false);
   const [roleMenu, setRoleMenu] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
-  const annBatchRef = useRef(0);
   const genStopRef = useRef(false);
   const ranActionRef = useRef("");
   const projectRef = useRef(project);
@@ -192,6 +193,11 @@ export default function Studio({
     const c = project?.chapters.find((x) => x.id === chapterId);
     if (c) setScript(c.lines);
   }, [chapterId, project?.chapters]);
+
+  useEffect(() => {
+    const el = thinkingBoxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [aiThinking]);
 
   useEffect(() => {
     if (!action) {
@@ -761,7 +767,7 @@ export default function Studio({
     }
   }
 
-  async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], startBatch = 0, context = "") {
+  async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], context = "") {
     const roster = baseCasts
       .filter((c) => c.name && c.name !== "旁白")
       .map((c) => (c.desc && c.desc !== "待匹配音色" ? `${c.name}（${c.desc}）` : c.name))
@@ -770,7 +776,7 @@ export default function Studio({
     const res = await annotateLines(
       baseLines.map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       baseCasts.map((c) => c.name),
-      startBatch,
+      0,
       fullContext
     );
 
@@ -810,35 +816,30 @@ export default function Studio({
       return;
     }
 
-    const batches = Math.ceil(script.length / 60);
-    let startBatch = 0;
-    if (annBatchRef.current > 0 && annBatchRef.current < batches) {
-      const resume = window.confirm(
-        `上次标注大概停在第 ${annBatchRef.current * 60} 句。\n\n确定：从停下的地方继续\n取消：全部重新标注`
-      );
-      if (resume) startBatch = annBatchRef.current;
-      else annBatchRef.current = 0;
-    }
-
     setAnnotating(true);
     setTask("running");
     setLogs([]);
-    setAiProgress({ done: 0, total: batches });
-    addLog(`准备标注 ${script.length} 句 · ${castList.length} 个角色`);
+    setAiThinking("");
+    setAiProgress({ done: 0, total: 1 });
+    addLog(`整章交给 AI：${script.length} 句 · ${castList.length} 个角色 · 开启思考`);
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
       setAiProgress({ done: p.done, total: p.total });
+      if (p.reasoning) {
+        setAiThinking((prev) => {
+          const nextText = prev + p.reasoning;
+          return nextText.length > 12000 ? nextText.slice(-12000) : nextText;
+        });
+      }
     });
 
     try {
       const { next, casts, changed, res } = await applyAnnotation(
         script,
         project?.casts ?? [],
-        startBatch,
         `${project?.title || ""} · ${chapter?.title || ""}`
       );
       saveLines(next, casts);
-      annBatchRef.current = res.cancelled ? res.nextBatch : 0;
 
       if (res.cancelled) {
         addLog(`已停止，保留已完成部分：修改 ${changed} 句`);
@@ -865,6 +866,7 @@ export default function Studio({
       off();
       setAnnotating(false);
       setAiMsg("");
+      setAiThinking("");
       setAiProgress({ done: 0, total: 0 });
     }
   }
@@ -882,12 +884,19 @@ export default function Studio({
     setTask("running");
     setLogs([]);
     setAnnotating(true);
+    setAiThinking("");
     setAiProgress({ done: 0, total: 0 });
     addLog(`读取原文 ${source.length.toLocaleString()} 字`);
 
     const off = onAiProgress((p) => {
       setAiMsg(p.message);
       setAiProgress({ done: p.done, total: p.total });
+      if (p.reasoning) {
+        setAiThinking((prev) => {
+          const nextText = prev + p.reasoning;
+          return nextText.length > 12000 ? nextText.slice(-12000) : nextText;
+        });
+      }
     });
 
     try {
@@ -931,11 +940,10 @@ export default function Studio({
         addLog(`AI 角色分析失败，继续用规则结果：${(e as Error).message}`);
       }
 
-      addLog("开始 AI 标注角色、情绪和语速");
+      addLog("开始 AI 标注角色、情绪和语速（整章 · 开启思考）");
       const { next, casts, changed, res } = await applyAnnotation(
         baseLines,
         baseCasts,
-        0,
         `${project?.title || ""} · ${chapter?.title || ""}`
       );
       usage = addAiUsage(usage, res.usage);
@@ -946,7 +954,6 @@ export default function Studio({
       saveLines(next, casts);
       if (chapter?.id) clearChapterStatus(chapter.id);
       if (chapterIdRef.current === chapter?.id) setCurrent(next[0]?.id ?? 1);
-      annBatchRef.current = res.cancelled ? res.nextBatch : 0;
 
       addLog(
         res.cancelled
@@ -973,6 +980,7 @@ export default function Studio({
       off();
       setAnnotating(false);
       setAiMsg("");
+      setAiThinking("");
       setAiProgress({ done: 0, total: 0 });
     }
   }
@@ -1076,8 +1084,17 @@ export default function Studio({
     setAnnotating(true);
     setTask("running");
     setLogs([]);
+    setAiThinking("");
     setAiProgress({ done: 0, total: project.chapters.length });
-    const off = onAiProgress((p) => setAiMsg(p.message));
+    const off = onAiProgress((p) => {
+      setAiMsg(p.message);
+      if (p.reasoning) {
+        setAiThinking((prev) => {
+          const nextText = prev + p.reasoning;
+          return nextText.length > 12000 ? nextText.slice(-12000) : nextText;
+        });
+      }
+    });
 
     try {
       let casts = (project.casts ?? []).filter(
@@ -1136,6 +1153,7 @@ export default function Studio({
             : { ...line, speaker: "未知" }
         );
 
+        setAiThinking("");
         try {
           const extracted = await extractCasts(
             src.source || "",
@@ -1155,7 +1173,6 @@ export default function Studio({
           const { next, casts: nextCasts, changed, res } = await applyAnnotation(
             srcLines,
             casts,
-            0,
             `${project.title} · ${src.title}`
           );
           usage = addAiUsage(usage, res.usage);
@@ -1659,7 +1676,7 @@ export default function Studio({
                   }}
                 >
                   <b>AI 重拆本章</b>
-                  <span>台词 + 角色 + 情绪 + 语速</span>
+                  <span>整章交给 AI 思考：台词 + 角色 + 情绪 + 语速</span>
                 </button>
                 <button
                   role="menuitem"
@@ -1670,7 +1687,7 @@ export default function Studio({
                   }}
                 >
                   <b>AI 标注角色</b>
-                  <span>只改说话人、情绪、语速，不重拆句子</span>
+                  <span>整章开启思考，只改说话人、情绪、语速</span>
                 </button>
                 <button
                   role="menuitem"
@@ -2076,6 +2093,19 @@ export default function Studio({
                       <span>{aiMsg}</span>
                     </div>
                   ) : null}
+
+                  {annotating && (
+                    <div className="ai-thinking">
+                      <div className="ai-thinking-head">
+                        <span>思考过程</span>
+                        <span>{aiThinking ? "实时显示 · 不写入结果" : "等待模型…"}</span>
+                      </div>
+                      <div className="ai-thinking-body" ref={thinkingBoxRef}>
+                        {aiThinking ||
+                          "角色分析阶段不展示思考；进入标注后，模型的思考会实时显示在这里，最终输出不会显示。"}
+                      </div>
+                    </div>
+                  )}
 
                   {logs.length > 0 && (
                     <div className="task-log" style={{ maxHeight: 140 }}>

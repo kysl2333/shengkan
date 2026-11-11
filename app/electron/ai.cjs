@@ -8,6 +8,7 @@ const DEFAULTS = {
   model: "mimo-v2.6-flash",
   apiKey: "",
   autoChapter: true,
+  annotateThinking: true,
   cloudProviders: {
     mimo: true,
   },
@@ -150,6 +151,71 @@ function normalizeBase(url) {
   return String(url || DEFAULTS.baseUrl).trim().replace(/\/+$/, "");
 }
 
+function cleanJsonText(content) {
+  return String(content || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+}
+
+async function streamChat(r, onReasoning) {
+  const decoder = new TextDecoder();
+  const reader = r.body.getReader();
+  let buffer = "";
+  let content = "";
+  let reasoning = "";
+  let pending = "";
+  let usage = null;
+  let finishReason = "";
+  let lastEmit = 0;
+
+  const flush = () => {
+    if (!pending) return;
+    const now = Date.now();
+    if (now - lastEmit < 120) return;
+    lastEmit = now;
+    const chunk = pending;
+    pending = "";
+    onReasoning?.(chunk);
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let json;
+      try {
+        json = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      if (json.usage) usage = json.usage;
+      const choice = json.choices?.[0];
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice?.delta || {};
+      const think = delta.reasoning_content ?? delta.reasoning;
+      if (typeof think === "string" && think) {
+        reasoning += think;
+        pending += think;
+        flush();
+      }
+      if (typeof delta.content === "string" && delta.content) {
+        content += delta.content;
+      }
+    }
+  }
+
+  if (pending) onReasoning?.(pending);
+  return { content, reasoning, usage, finishReason };
+}
+
 async function chatJSON(messages, options = {}) {
   const cfg = readAiConfig();
   if (!cfg.apiKey) {
@@ -157,17 +223,20 @@ async function chatJSON(messages, options = {}) {
   }
 
   const isMimo = cfg.provider === "mimo" || /xiaomimimo/i.test(String(cfg.baseUrl || ""));
+  const useStream = Boolean(options.stream);
   const body = {
     model: cfg.model,
     messages,
-    temperature: options.temperature ?? 0.1,
-    stream: false,
+    stream: useStream,
     response_format: { type: "json_object" },
   };
+  if (!(isMimo && options.thinking)) {
+    body.temperature = options.temperature ?? 0.1;
+  }
   if (isMimo) {
     body.max_completion_tokens = options.maxTokens ?? 16384;
-    // MiMo 的结构化任务关掉思考，避免 reasoning 吃光输出
     body.thinking = { type: options.thinking ? "enabled" : "disabled" };
+    if (useStream) body.stream_options = { include_usage: true };
   } else {
     body.max_tokens = options.maxTokens ?? 16384;
   }
@@ -188,34 +257,57 @@ async function chatJSON(messages, options = {}) {
     signal,
   });
 
-  const raw = await r.text();
   if (!r.ok) {
+    const raw = await r.text();
     let detail = raw.slice(0, 400);
     try {
       detail = JSON.parse(raw)?.error?.message || detail;
     } catch {
       /* 保留原始文本 */
     }
-    throw new Error(`MiMo 请求失败 HTTP ${r.status}：${detail}`);
+    throw new Error(`AI 请求失败 HTTP ${r.status}：${detail}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error("MiMo 返回的不是 JSON");
+  let content = "";
+  let usage = null;
+  let finishReason = "";
+  const type = r.headers.get("content-type") || "";
+
+  if (useStream && type.includes("text/event-stream")) {
+    const streamed = await streamChat(r, options.onReasoning);
+    content = streamed.content;
+    usage = streamed.usage;
+    finishReason = streamed.finishReason;
+  } else {
+    const raw = await r.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error("AI 返回的不是 JSON");
+    }
+    const message = data.choices?.[0]?.message || {};
+    content = message.content || "";
+    usage = data.usage;
+    finishReason = data.choices?.[0]?.finish_reason || "";
+    const reasoning = message.reasoning_content ?? message.reasoning;
+    if (typeof reasoning === "string" && reasoning.trim()) {
+      options.onReasoning?.(reasoning);
+    }
   }
 
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("MiMo 没有返回内容");
+  if (!content) {
+    throw new Error(
+      finishReason === "length"
+        ? "思考占满了 max_completion_tokens，最终回答被截断；请缩短这一章或调高输出上限"
+        : "AI 没有返回内容"
+    );
+  }
 
-  const cleaned = content
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
+  const cleaned = cleanJsonText(content);
 
   try {
-    return { data: JSON.parse(cleaned), usage: data.usage };
+    return { data: JSON.parse(cleaned), usage };
   } catch {
     throw new Error(`模型输出不是合法 JSON：${cleaned.slice(0, 200)}`);
   }
@@ -342,7 +434,7 @@ async function detectChapters(text, onProgress, toc = [], workTitle = "") {
 const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给你一章已经拆好的台词，每句有 id、speaker、text。
 
 任务：
-1. 先看 before / lines / after，结合 context 里的角色表和作品信息，分析人物关系、称呼、语气、场景，再判断每句的说话人。
+1. 用户会给你一整章已经拆好的台词和角色表，先通读整章，分析人物关系、称呼、语气、场景，再判断每句的说话人。
 2. 只修改说话人标错或标成「未知」的句子；已经是「旁白」的叙述句不要改成角色。
 3. speaker 只能从给定的角色列表里选；实在判断不了就保留「未知」。
 4. 引号里的内容不自动等于台词。先看引号外的叙述框架：谁说、对谁说、在什么场景说。
@@ -357,47 +449,67 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 10. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
 11. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
 12. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
-13. before / after 是这一段前后紧挨的句子，只用来判断指代、称呼、语气和场景，不要返回它们的 id；只返回 lines 里需要修改的句子。
-14. 只返回需要修改的句子，不要返回全部。
+13. 思考过程用简体中文，只列关键疑点：谁在场、称呼指向谁、是不是设备里的声音、哪些句子拿不准。不要复述原文，不要逐句解释，不要写完整推理报告。
+14. 只返回需要修改的句子，不要返回全部，也不要返回你的思考过程。
 
 只返回 JSON，不要解释：
 {"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
+
+const ANNOTATE_MAX_CHARS = 60000;
+
+function chunkForAnnotation(lines, maxChars = ANNOTATE_MAX_CHARS) {
+  const chunks = [];
+  let current = [];
+  let size = 0;
+  for (const line of lines) {
+    const cost = String(line.text || "").length + 48;
+    if (current.length && size + cost > maxChars) {
+      chunks.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(line);
+    size += cost;
+  }
+  if (current.length) chunks.push(current);
+  return chunks.length ? chunks : [[]];
+}
 
 async function annotateLines(lines, casts, onProgress, startBatch = 0, context = "") {
   const list = Array.isArray(lines) ? lines : [];
   if (!list.length) return { changes: [], cancelled: false, nextBatch: 0, usage: emptyUsage() };
 
   const names = (casts || []).map((c) => (typeof c === "string" ? c : c?.name)).filter(Boolean);
-  const BATCH = 60;
-  const batches = [];
-  for (let i = 0; i < list.length; i += BATCH) batches.push(list.slice(i, i + BATCH));
+  // 默认整章一次交给 AI；只有超出上下文预算的长章才按字符切段。
+  const chunks = chunkForAnnotation(list);
 
   const changes = [];
   let usage = emptyUsage();
   let cancelled = false;
-  let finished = Math.max(0, Math.min(startBatch, batches.length));
+  const startAt = Number.isFinite(Number(startBatch)) ? Number(startBatch) : 0;
+  let finished = Math.max(0, Math.min(startAt, chunks.length));
   detectAbort = new AbortController();
 
   const cfg = readAiConfig();
+  const isMimo = cfg.provider === "mimo" || /xiaomimimo/i.test(String(cfg.baseUrl || ""));
+  const thinking = cfg.annotateThinking !== false;
   const systemPrompt = String(cfg.prompts?.annotate || "").trim() || ANNOTATE_PROMPT;
 
   try {
-    for (let i = finished; i < batches.length; i++) {
+    for (let i = finished; i < chunks.length; i++) {
+      const whole = chunks.length === 1;
       onProgress?.({
         done: i,
-        total: batches.length,
-        message: `AI 正在标注角色 ${i + 1}/${batches.length}`,
+        total: chunks.length,
+        message: whole
+          ? `AI 正在通读整章 ${chunks[i].length} 句…`
+          : `AI 正在分析第 ${i + 1}/${chunks.length} 段（${chunks[i].length} 句）…`,
       });
 
-      const start = i * BATCH;
-      const end = start + batches[i].length;
-      const brief = (l) => ({ id: l.id, speaker: l.speaker, text: l.text });
       const payload = {
         context: String(context || ""),
         casts: names,
-        before: list.slice(Math.max(0, start - 4), start).map(brief),
-        lines: batches[i].map(brief),
-        after: list.slice(end, end + 4).map(brief),
+        lines: chunks[i].map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       };
 
       const { data, usage: chunkUsage } = await chatJSON(
@@ -405,7 +517,19 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
           { role: "system", content: systemPrompt },
           { role: "user", content: JSON.stringify(payload) },
         ],
-        { signal: detectAbort.signal }
+        {
+          signal: detectAbort.signal,
+          thinking,
+          stream: true,
+          maxTokens: isMimo ? 32768 : 16384,
+          onReasoning: (chunk) =>
+            onProgress?.({
+              done: i,
+              total: chunks.length,
+              message: "AI 正在思考…",
+              reasoning: chunk,
+            }),
+        }
       );
       usage = addUsage(usage, chunkUsage);
 
@@ -433,7 +557,7 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
 
   onProgress?.({
     done: finished,
-    total: batches.length,
+    total: chunks.length,
     message: cancelled ? "已停止，保留已完成结果" : "角色标注完成",
   });
 

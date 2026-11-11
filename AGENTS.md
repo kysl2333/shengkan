@@ -138,7 +138,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 角色列表用 `isRealCharacter` 过滤作者、插画、制作信息、目录、译者等非人物；无名字路人允许「OL女性」「店员」这类身份名。
 - 「AI 重拆本章」先 `extractCasts` 分析本章角色，再 `annotateLines` 标注角色、情绪、语速。
 - 整本角色标注会先做一次整本角色预分析，再逐章标注；整本重拆章节只用规则，不碰角色。
-- AI 标注按 60 句一批，支持停止和从批次续跑。
+- AI 标注默认整章一次发送并开启思考；超过 6 万字符才切段。停止后保留已完成段的修改，不再提供按批续跑。
 - 提示词存在 `userData/ai.json` 的 `prompts.chapter` / `prompts.annotate`；留空用内置。
 
 ## 约定
@@ -165,7 +165,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 空行分段后如果上一段没有句末标点、下一段也是旁白，拆分末尾要合回同一句；紧接着名词或引号时直接拼，另起一句时补一个「，」当停顿。
 - 规则重拆和整本重拆只能换断句：文字完全相同的旧台词要保留 speaker / emotion / speed / audio，只删除没被复用的旧音频。
 - 断句始终用规则，AI 只负责角色、情绪、语速；不要改成让 AI 拆句，否则会改写原文或漏句。
-- AI 标注按 60 句一批，每批带角色表和前后各 4 句上下文；不要把整章原文重复发给模型，token 会翻倍。
+- AI 标注默认整章一次发送，开启 MiMo thinking；只有超长章节才按 6 万字符切段。思考走 `reasoning_content` / SSE，只展示不解析，绝不能当 JSON 结果。
 - 角色标注提示词不能鼓励「根据引号里的名字判断说话人」；名字出现在引号内容里不等于说话人。
 - MCP 权限用 `SHENGKAN_MCP_PERMISSION=read|edit|generate|full`，默认 `generate`；写操作和生成在 server 内还有第二道限制。
 - 开发日志 5 MB 轮转、保留 1 份备份；不要在 UI 里假装日志无限增长。
@@ -223,7 +223,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 删除前必须打印绝对路径、列出内容、向用户确认；默认删到回收站。
 - 不要把 API Key 写进源码、`engine/config.json` 或安装包。Key 只放 `userData/ai.json`。
 - 不要改回「按 spine 文件一章」的 EPUB 解析。
-- 不要给结构化任务重新打开 MiMo 深度思考。
+- MiMo 深度思考只用于角色标注，并且必须把 `reasoning_content` 和最终 JSON 分开；不要把思考内容当返回结果，也不要在 thinking 模式下传 temperature/top_p。
 - 不要按文件名 `voice_03` 之类自动猜音色的性别和年龄，以 `voices/meta.json` 为准。
 - 不要改 `engine/node-server.mjs` 的 Gradio 参数发现逻辑去写死顺序。
 - 不要随便杀 `electron.exe` 主进程，先确认是不是声栞。

@@ -619,6 +619,23 @@ export default function Settings() {
                 导入时优先尝试 AI 识别章节
               </div>
             </Row>
+            <Row
+              label="标注思考模式"
+              help="开启后整章交给 AI 深度思考，说话人判断更准，但会更慢；关闭后直接给结果。只有小米 MiMo 等支持 thinking 的模型会生效。"
+            >
+              <div
+                className="check-row"
+                style={{ cursor: "pointer" }}
+                onClick={() =>
+                  aiCfg && setAiCfg({ ...aiCfg, annotateThinking: aiCfg.annotateThinking === false })
+                }
+              >
+                <span className={`check ${aiCfg?.annotateThinking !== false ? "on" : ""}`}>
+                  {aiCfg?.annotateThinking !== false ? "✓" : " "}
+                </span>
+                整章深度思考（默认开）
+              </div>
+            </Row>
             <Row label="台词拆分" help="断句始终用规则，保证原文一字不改；AI 只负责角色、情绪和语速。让 AI 断句容易改写原文或漏句，所以不提供。">
               <div className="test-result"><span className="dot ok" />规则拆分 · 不消耗 token</div>
             </Row>
