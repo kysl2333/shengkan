@@ -256,6 +256,13 @@ export default function Studio({
   }, [flashLine]);
 
   useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!action) {
       ranActionRef.current = "";
       return;
@@ -485,6 +492,13 @@ export default function Studio({
     const prev = line.audioHistory[0];
     const rest = [line.audio, ...line.audioHistory.slice(1)];
     updateLine(line.id, { audio: prev, audioHistory: rest, status: "done" });
+    setCurrent(line.id);
+    setFlashLine(line.id);
+    const label = `第 ${line.id} 句已切换到上一版配音`;
+    setGenMsg(label);
+    showToast(label);
+    log("generate", "切换配音版本", { lineId: line.id, from: line.audio, to: prev });
+    loadAndPlay(audioUrl(prev), undefined, true);
   }
 
   function updateLine(
@@ -1371,50 +1385,70 @@ export default function Studio({
     log("tts", "系统语音试听", { chars: text.length, voice: voice?.name || "默认" });
   }
 
-  function loadAndPlay(src: string, onEnded?: () => void, force = false) {
-    if (!src) return;
-    if (!force && audioSrc === src && audioRef.current) {
-      if (audioRef.current.paused) {
-        audioRef.current.play().catch(() => {});
-        setAudioPlaying(true);
-      } else {
-        audioRef.current.pause();
-        setAudioPlaying(false);
-      }
-      return;
-    }
+  function applyPlaybackRate(audio: HTMLAudioElement) {
+    const rate = audioRateRef.current;
+    audio.defaultPlaybackRate = rate;
+    audio.playbackRate = rate;
+  }
 
-    audioRef.current?.pause();
-    const audio = new Audio(src);
-    audioRef.current = audio;
-    audio.playbackRate = audioRateRef.current;
+  function ensureAudio() {
+    if (audioRef.current) return audioRef.current;
+    const audio = new Audio();
     audio.preload = "auto";
     const syncDuration = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) setAudioDuration(audio.duration);
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setAudioDuration(audio.duration);
+      }
     };
     audio.onloadedmetadata = syncDuration;
     audio.ondurationchange = syncDuration;
     audio.onloadeddata = syncDuration;
     audio.ontimeupdate = () => {
       setAudioTime(audio.currentTime);
-      if (audioDuration <= 0) syncDuration();
+      syncDuration();
     };
-    audio.onplay = () => setAudioPlaying(true);
+    audio.onplay = () => {
+      applyPlaybackRate(audio);
+      setAudioPlaying(true);
+    };
     audio.onpause = () => setAudioPlaying(false);
     audio.onerror = () => {
       setAudioPlaying(false);
       setGenMsg("音频加载失败，文件可能已被删除");
     };
+    audioRef.current = audio;
+    return audio;
+  }
+
+  function loadAndPlay(src: string, onEnded?: () => void, force = false) {
+    if (!src) return;
+    const audio = ensureAudio();
+    if (!force && audioSrc === src) {
+      if (audio.paused) {
+        applyPlaybackRate(audio);
+        audio.play().catch(() => setAudioPlaying(false));
+      } else {
+        audio.pause();
+      }
+      return;
+    }
+
+    audio.pause();
     audio.onended = () => {
       setAudioPlaying(false);
       onEnded?.();
     };
+    audio.src = src;
     setAudioSrc(src);
     setAudioTime(0);
     setAudioDuration(0);
     setAudioPlaying(true);
     audio.load();
-    audio.play().catch(() => setAudioPlaying(false));
+    applyPlaybackRate(audio);
+    audio.play().catch(() => {
+      setAudioPlaying(false);
+      setGenMsg("播放被浏览器拦住了，再点一次播放键");
+    });
   }
 
   function togglePlay() {
@@ -1423,6 +1457,7 @@ export default function Studio({
       return;
     }
     if (audioRef.current.paused) {
+      applyPlaybackRate(audioRef.current);
       audioRef.current.play().catch(() => {});
       setAudioPlaying(true);
     } else {
@@ -2139,7 +2174,7 @@ export default function Studio({
                       <div className="line-actions">
                         {line.audioHistory?.length ? (
                           <button
-                            title="切换上一个音频"
+                            title={`切换上一版配音${line.audioHistory.length > 1 ? `（还有 ${line.audioHistory.length} 个历史版本）` : ""}`}
                             aria-label="切换上一个音频"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2255,7 +2290,7 @@ export default function Studio({
                   const rate = Number(e.target.value);
                   audioRateRef.current = rate;
                   setAudioRate(rate);
-                  if (audioRef.current) audioRef.current.playbackRate = rate;
+                  if (audioRef.current) applyPlaybackRate(audioRef.current);
                 }}
                 title="播放倍速"
               >

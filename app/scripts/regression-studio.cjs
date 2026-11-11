@@ -16,6 +16,8 @@
  * 11. 生成参数显示实际音色引擎
  * 12. 连续试听跳过缺音频的句子并跟随当前句
  * 13. 云端失败后串行重试并汇报结果
+ * 14. 切换历史配音有反馈
+ * 15. 连续换句保持倍速且复用同一个音频元素
  */
 
 const { app, BrowserWindow, ipcMain } = require("electron");
@@ -44,8 +46,9 @@ const project = {
       source: "第一句\n\n第二句",
       lines: [
         { id: 1, speaker: "旁白", text: "第一句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 1 },
-        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "done", audio: "line2.wav", paragraph: 2 },
+        { id: 2, speaker: "旁白", text: "第二句", emotion: "平静", speed: 1, status: "done", audio: "line2.wav", audioHistory: ["line2-old.wav"], paragraph: 2 },
         { id: 3, speaker: "旁白", text: "重试测试句", emotion: "平静", speed: 1, status: "pending", audio: "", paragraph: 3 },
+        { id: 4, speaker: "旁白", text: "第四句", emotion: "平静", speed: 1, status: "done", audio: "line4.wav", paragraph: 4 },
       ],
     },
     {
@@ -126,6 +129,19 @@ async function installStubs(win) {
     `(() => {
       window.__fetchLog = { audioDeletes: [], tts: 0 };
       window.confirm = () => true;
+      const RealAudio = window.Audio;
+      if (!window.__audioPatched) {
+        window.__audioPatched = true;
+        window.__audioCount = 0;
+        window.__lastAudio = null;
+        window.Audio = function (...args) {
+          const audio = new RealAudio(...args);
+          window.__audioCount += 1;
+          window.__lastAudio = audio;
+          return audio;
+        };
+        window.Audio.prototype = RealAudio.prototype;
+      }
       if (window.__originalFetch) return true;
       window.__originalFetch = window.fetch.bind(window);
       window.fetch = async (url, init) => {
@@ -462,6 +478,47 @@ app.whenReady().then(async () => {
     "失败后串行重试并汇报结果",
     retryDone === true && retryMsg.includes("重试成功 1 句"),
     `done=${retryDone} msg=${retryMsg.replace(/\s+/g, " ").slice(0, 60)}`
+  );
+
+  // 14. 切换历史配音有反馈
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(250);
+  await evalJs(
+    win,
+    `document.querySelectorAll('.line')[1].querySelector('button[aria-label="切换上一个音频"]')?.click()`
+  );
+  await wait(250);
+  const switchToast = await evalJs(win, `document.querySelector('.toast')?.textContent || ''`);
+  check("切换历史配音有反馈", switchToast.includes("上一版配音"), switchToast.trim());
+
+  // 15. 倍速全局生效并复用同一个 Audio 元素
+  await reload(win);
+  await clickChapter(win, "第一章");
+  await wait(250);
+  await evalJs(
+    win,
+    `(() => {
+      const sel = document.querySelector('.speed-select');
+      if (!sel) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(sel, '3');
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`
+  );
+  await wait(150);
+  await evalJs(win, `document.querySelectorAll('.line')[1].querySelector('.line-play')?.click()`);
+  await wait(350);
+  const rate1 = await evalJs(win, `window.__lastAudio?.playbackRate ?? 0`);
+  await evalJs(win, `document.querySelectorAll('.line')[3].querySelector('.line-play')?.click()`);
+  await wait(350);
+  const rate2 = await evalJs(win, `window.__lastAudio?.playbackRate ?? 0`);
+  const audioCount = await evalJs(win, `window.__audioCount`);
+  check(
+    "连续换句保持倍速且复用同一个音频元素",
+    rate1 === 3 && rate2 === 3 && audioCount === 1,
+    `rate1=${rate1} rate2=${rate2} count=${audioCount}`
   );
 
   const failed = results.filter((r) => !r.pass).length;

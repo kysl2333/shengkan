@@ -158,6 +158,8 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 生成引擎标签必须按目标台词绑定的 `cast` 计算，不能用当前选中的 `selectedCast`；用户会在生成过程中点别的台词。
 - 批量生成每句完成要立即更新 `script`；`saveChapterLines(persist=false)` 只是不落盘，不代表不刷新界面。
 - 连续试听按 `ProjectLine` 排队，跳过没有音频的句子；每句切换要 `setCurrent`、滚动到对应行并闪烁。播放倍速用 ref，换音频后重新应用。
+- 换音频只改同一个 `HTMLAudioElement` 的 `src`，不要每句 `new Audio`；`load()` 会重置倍速，必须同时设置 `defaultPlaybackRate` 并在 `onplay` 再应用一次。
+- 切换历史配音、回退音频版本必须有可见反馈：toast、当前行闪烁，并自动播放切换后的版本。
 - 音频接口必须支持 HTTP Range；不支持 206 时浏览器拖动进度条会重新拉整个文件。
 - 云端失败重试要串行并留间隔，不要沿用第一遍的并发；结束要说明重试成功和仍失败数量。生成请求要有超时看门狗，不能因为一句卡住整批。
 - 删除台词、删除章节、重新拆分或整本重拆时，用 `/v1/audio-delete` 清掉被替换的旧 wav。
