@@ -1000,7 +1000,7 @@ export default function Studio({
       setGenMsg("这一章没有原文，导入时保留原文才能重拆");
       return;
     }
-    if (!window.confirm("会先用规则重新拆句，再调 AI 分析角色、标注情绪和语速。继续？")) return;
+    if (!window.confirm("会先用规则重新拆句，再调 AI 分析角色、标注情绪和语速。\n\n思考模式通常需要 2–10 分钟；慢一些，但角色和语气判断更准。继续？")) return;
 
     setView("source");
     setTask("running");
@@ -1205,7 +1205,7 @@ export default function Studio({
     if (
       !skipConfirm &&
       !window.confirm(
-        `会逐章分析角色、情绪和语速，章节多时会调用很多次 AI，可以随时停止。继续？`
+        `会逐章分析角色、情绪和语速；单章思考通常需要 2–10 分钟。章节多时会调用很多次 AI，可以随时停止。继续？`
       )
     ) {
       return;
@@ -1907,6 +1907,9 @@ export default function Studio({
                 <div className="ai-menu-head">
                   <b>AI 分析</b>
                   <span>先分析角色和说话人，再补未知台词</span>
+                  <span className="ai-menu-tip">
+                    思考模式通常需要 2–10 分钟；慢一些，但角色和语气判断更准。
+                  </span>
                 </div>
                 <button
                   role="menuitem"
@@ -2398,6 +2401,12 @@ export default function Studio({
                       <span>{aiMsg}</span>
                     </div>
                   ) : null}
+
+                  {annotating && (
+                    <div className="ai-wait-note">
+                      思考模式通常需要 2–10 分钟；慢一些，但角色和语气判断更准。
+                    </div>
+                  )}
 
                   {(annotating || aiThinking) && (
                     <div className="ai-thinking">
