@@ -298,15 +298,26 @@ def split_block(block: str, paragraph: int = 1):
     return segments
 
 
+# 原文按空行断开的半句话接回去：紧接名词/引号时不加标点，另起一句时补一个逗号当停顿。
+NO_GLUE_END = re.compile(r"[，,、；;：:（(“‘「『《【\s的之地得着过和与及或之者了把被让给在是有…—\-]$")
+NO_GLUE_START = re.compile(r"^[“‘「『\"”」』'）)\]】》」』，,、；;：:的之地得]")
+
+
+def join_continuation(prev_text: str, next_text: str) -> str:
+    if NO_GLUE_END.search(prev_text.rstrip()) or NO_GLUE_START.match(next_text.strip()):
+        return prev_text + next_text
+    return prev_text + "，" + next_text
+
+
 def merge_continuations(segments):
     out = []
     for seg in segments:
         prev = out[-1] if out else None
         if prev and prev["speaker"] == "旁白" and seg["speaker"] == "旁白":
+            # 上一段没有句末标点，说明原文把一句话拆成了多个空行，直接接回去。
             tail = re.sub(r"[”」』\"'）)\]】]+$", "", prev["text"].strip())
-            opens = re.match(r"^[“「『\"'的之地得，,、；;：:）)】\]》」』]", seg["text"].strip())
-            if not re.search(r"[。！？!?…：:；;]$", tail) and opens:
-                prev["text"] += seg["text"]
+            if not re.search(r"[。！？!?…：:；;]$", tail):
+                prev["text"] = join_continuation(prev["text"], seg["text"])
                 prev["confidence"] = min(prev["confidence"], seg["confidence"])
                 continue
         out.append(dict(seg))

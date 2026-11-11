@@ -382,15 +382,27 @@ function nameAfter(text) {
 
 const QUOTE_RE = /“([^”]*)”|「([^」]*)」|『([^』]*)』|"([^"]*)"/g;
 
+// 原文按空行断开的半句话接回去：紧接名词/引号时不加标点，另起一句时补一个逗号当停顿。
+const NO_GLUE_END = /[，,、；;：:（(“‘「『《【\s的之地得着过和与及或之者了把被让给在是有…—\-]$/;
+const NO_GLUE_START = /^[“‘「『"”」』'）)\]】》」』，,、；;：:的之地得]/;
+
+function joinContinuation(prevText, nextText) {
+  const tail = prevText.replace(/\s+$/, "");
+  if (NO_GLUE_END.test(tail) || NO_GLUE_START.test(nextText.trim())) {
+    return `${prevText}${nextText}`;
+  }
+  return `${prevText}，${nextText}`;
+}
+
 function mergeContinuationSegments(segments) {
   const out = [];
   for (const seg of segments) {
     const prev = out[out.length - 1];
     if (prev && prev.speaker === "旁白" && seg.speaker === "旁白") {
+      // 上一段没有句末标点，说明原文把一句话拆成了多个空行，直接接回去。
       const tail = prev.text.trim().replace(/[”」』"'）)\]】]+$/, "");
-      const opensNext = /^[“「『"'的之地得，,、；;：:）)】\]》」』]/.test(seg.text.trim());
-      if (!/[。！？!?…：:；;]$/.test(tail) && opensNext) {
-        prev.text = `${prev.text}${seg.text}`;
+      if (!/[。！？!?…：:；;]$/.test(tail)) {
+        prev.text = joinContinuation(prev.text, seg.text);
         prev.confidence = Math.min(prev.confidence, seg.confidence);
         continue;
       }

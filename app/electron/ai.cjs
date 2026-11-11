@@ -342,7 +342,7 @@ async function detectChapters(text, onProgress, toc = [], workTitle = "") {
 const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给你一章已经拆好的台词，每句有 id、speaker、text。
 
 任务：
-1. 先通读整章，分析人物关系、称呼、语气、场景和上下文，再判断每句的说话人。
+1. 先看 before / lines / after，结合 context 里的角色表和作品信息，分析人物关系、称呼、语气、场景，再判断每句的说话人。
 2. 只修改说话人标错或标成「未知」的句子；已经是「旁白」的叙述句不要改成角色。
 3. speaker 只能从给定的角色列表里选；实在判断不了就保留「未知」。
 4. 引号里的内容不自动等于台词。先看引号外的叙述框架：谁说、对谁说、在什么场景说。
@@ -357,7 +357,8 @@ const ANNOTATE_PROMPT = `你是有声书配音的角色标注助手。用户给�
 10. 同时给出情绪，只能从：平静、高兴、愤怒、悲伤、害怕、厌恶、忧郁、惊讶、克制、试探、警惕、疲惫 里选。
 11. 同时给出语速，用 0.5-2.0 的数字：1 是正常，小于 1 更慢，大于 1 更快。不要用「慢/快/稍慢」这类词。
 12. 如果 context 给出了作品名，可以结合你已知的该作品角色名和称呼；只能使用原文出现或明确指向本作的角色，不确定就保留「未知」，不要把其他作品的角色混进来。
-13. 只返回需要修改的句子，不要返回全部。
+13. before / after 是这一段前后紧挨的句子，只用来判断指代、称呼、语气和场景，不要返回它们的 id；只返回 lines 里需要修改的句子。
+14. 只返回需要修改的句子，不要返回全部。
 
 只返回 JSON，不要解释：
 {"lines":[{"id":12,"speaker":"堀北","emotion":"平静","speed":1.0}]}`;
@@ -388,10 +389,15 @@ async function annotateLines(lines, casts, onProgress, startBatch = 0, context =
         message: `AI 正在标注角色 ${i + 1}/${batches.length}`,
       });
 
+      const start = i * BATCH;
+      const end = start + batches[i].length;
+      const brief = (l) => ({ id: l.id, speaker: l.speaker, text: l.text });
       const payload = {
         context: String(context || ""),
         casts: names,
-        lines: batches[i].map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
+        before: list.slice(Math.max(0, start - 4), start).map(brief),
+        lines: batches[i].map(brief),
+        after: list.slice(end, end + 4).map(brief),
       };
 
       const { data, usage: chunkUsage } = await chatJSON(

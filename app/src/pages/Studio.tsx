@@ -762,11 +762,16 @@ export default function Studio({
   }
 
   async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], startBatch = 0, context = "") {
+    const roster = baseCasts
+      .filter((c) => c.name && c.name !== "旁白")
+      .map((c) => (c.desc && c.desc !== "待匹配音色" ? `${c.name}（${c.desc}）` : c.name))
+      .join("、");
+    const fullContext = [context, roster ? `角色表：${roster}` : ""].filter(Boolean).join("\n");
     const res = await annotateLines(
       baseLines.map((l) => ({ id: l.id, speaker: l.speaker, text: l.text })),
       baseCasts.map((c) => c.name),
       startBatch,
-      context
+      fullContext
     );
 
     let changed = 0;

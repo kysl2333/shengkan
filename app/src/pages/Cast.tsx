@@ -720,10 +720,18 @@ export default function Cast({
       <div className="cast-right">
         <div className="voice-toolbar">
           <div className="seg" style={{ flex: "0 0 210px" }}>
-            <button className={mode === "local" ? "on" : ""} onClick={() => setMode("local")}>
+            <button
+              className={mode === "local" ? "on" : ""}
+              title="参考音频存在本机 voices/ 目录，用 IndexTTS 生成，不消耗云 TTS 额度"
+              onClick={() => setMode("local")}
+            >
               本地音色
             </button>
-            <button className={mode === "cloud" ? "on" : ""} onClick={() => setMode("cloud")}>
+            <button
+              className={mode === "cloud" ? "on" : ""}
+              title="调用小米 MiMo / 千问 / 自定义 TTS，生成时消耗云端额度"
+              onClick={() => setMode("cloud")}
+            >
               云音色
             </button>
           </div>
@@ -735,6 +743,11 @@ export default function Cast({
           />
           <span className="voice-hint">
             {selected ? `正在给「${selected.name}」绑定音色，点按钮可取消绑定` : "先在左侧选一个角色"}
+          </span>
+          <span className="voice-mode-help">
+            {mode === "local"
+              ? "本地音色：参考音频存在本机 voices/ 目录，用 IndexTTS 生成，不消耗云 TTS 额度。"
+              : "云音色：小米 MiMo / 千问 / 自定义 TTS，生成时直接调云服务，会消耗对应服务商额度；点「加入本地音色库」可复制成本机 IndexTTS 参考音频。"}
           </span>
           {mode === "cloud" && (
             <button className="btn small" onClick={openDesign} disabled={!designProviders.length}>
