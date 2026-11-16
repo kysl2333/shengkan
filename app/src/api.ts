@@ -37,11 +37,11 @@ export interface Segment {
   paragraph?: number;
 }
 
-async function json<T>(url: string, init?: RequestInit): Promise<T> {
+async function json<T>(url: string, init?: RequestInit, timeout = 120_000): Promise<T> {
   const r = await fetch(url, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(timeout),
   });
   if (!r.ok) {
     const body = await r.text().catch(() => "");
@@ -54,7 +54,7 @@ let healthRequest: Promise<Health> | undefined;
 
 export function getHealth() {
   if (!healthRequest) {
-    healthRequest = json<Health>(`${ENGINE}/health`).finally(() => {
+    healthRequest = json<Health>(`${ENGINE}/health`, undefined, 10_000).finally(() => {
       healthRequest = undefined;
     });
   }
