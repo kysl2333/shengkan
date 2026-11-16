@@ -1521,6 +1521,10 @@ export default function Studio({
   function loadAndPlay(src: string, onEnded?: () => void, force = false) {
     if (!src) return;
     const audio = ensureAudio();
+    audio.onended = () => {
+      setAudioPlaying(false);
+      onEnded?.();
+    };
     if (!force && audioSrc === src) {
       if (audio.paused) {
         applyPlaybackRate(audio);
@@ -1532,10 +1536,6 @@ export default function Studio({
     }
 
     audio.pause();
-    audio.onended = () => {
-      setAudioPlaying(false);
-      onEnded?.();
-    };
     audio.src = src;
     setAudioSrc(src);
     setAudioTime(0);
