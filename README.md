@@ -74,7 +74,7 @@
 
 ## 🚀 快速开始
 
-1. **安装并启动**：从 [Releases](../../releases/latest) 下载 `shengkan-*-setup.exe`，按提示安装。
+1. **安装并启动**：从 [Releases](https://github.com/kysl2333/shengkan/releases/latest) 下载 `shengkan-*-setup.exe`，按提示安装。
 2. **配置文本 AI**：打开「设置 → AI 服务 → 文本 AI」，选择小米 MiMo、千问百炼、DeepSeek 或自定义 OpenAI 兼容服务，填入 Base URL、模型和 API Key，点「测试」确认连接，再点「保存 AI 配置」。
 3. **配置配音方式**：
    - 有本地 IndexTTS WebUI：在「语音引擎」里填 `http://127.0.0.1:7860`，保存后重启。

@@ -154,7 +154,7 @@ npm.cmd run check:studio
 - 安装版路径已验证：项目/音色在 `文档/shengkan-projects`、`文档/shengkan-voices`，音频/配置/日志在 `%APPDATA%/shengkan`；旧的中文目录不会自动迁移
 - 旧项目的错误角色不会自动清理，用「清理无效角色」或整本角色标注
 - 远端 WebUI 关掉后生成报连接失败
-- `release/` 里的安装包是旧构建
+- `release/` 里的安装包是构建产物，改了代码要重新 `npm run dist`；当前 v1.0.1 已发布
 
 ## 待办
 

@@ -270,7 +270,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - `npm install` 后 Electron 的 `dist` 可能没下载，需要 `node node_modules/electron/install.js`。
 - 迁移包 `app/electron` 初始没有 `config.cjs`，`main.cjs` 依赖它，必须保留。
 - 远端 WebUI 关掉后生成报连接失败，拆章和导入不受影响。
-- `release/` 里的安装包是旧构建，改了代码要重新 `npm run dist`。
+- `release/` 里的安装包是构建产物，改了代码要重新 `npm run dist`；当前 v1.0.1 已发布。
 - 旧项目不会自动过滤 EPUB 版权页；需要重新导入，或对正文章节用「AI 重拆本章」。
 - 旧项目里的假角色不会自动消失，用角色页「清理无效角色」或「整本角色标注」重建。
 - MCP 默认读最近修改的项目，可用 `project` 参数指定 id 或标题。
