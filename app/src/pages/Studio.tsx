@@ -2203,7 +2203,7 @@ export default function Studio({
                       </div>
                     )}
                   </div>
-                  <div>
+                  <div className="line-content">
                     <div
                       className="line-text"
                       onDoubleClick={(e) => {

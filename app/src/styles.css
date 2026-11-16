@@ -1420,7 +1420,7 @@ textarea.input {
 
 .line {
   display: grid;
-  grid-template-columns: 20px 92px 1fr;
+  grid-template-columns: 20px 92px minmax(0, 1fr);
   gap: 14px;
   padding: 12px 12px 13px;
   margin: 0 -12px;
@@ -1484,7 +1484,9 @@ textarea.input {
   font-family: var(--serif);
   font-size: 14px;
   color: var(--ink-2);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  align-self: start;
   position: relative;
   cursor: pointer;
   transition: color 0.15s ease-out;
@@ -1499,12 +1501,17 @@ textarea.input {
   font-weight: 600;
 }
 
+.line-content {
+  min-width: 0;
+}
+
 .line-text {
   font-family: var(--serif);
   font-size: 19px;
   line-height: 1.95;
   color: var(--sheet-ink);
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
 .line-text .stage {
@@ -2092,6 +2099,27 @@ textarea.input {
 }
 
 @container studio-main (max-width: 540px) {
+  .script .line {
+    grid-template-columns: 18px minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 4px;
+  }
+
+  .line-check {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .line-speaker {
+    grid-column: 2;
+    text-align: left;
+    padding-top: 0;
+  }
+
+  .line-content {
+    grid-column: 2;
+  }
+
   .player {
     gap: 6px;
     padding: 0 14px;
@@ -4858,7 +4886,7 @@ input.slider[type="range"]::-webkit-slider-thumb {
   }
 
   .line {
-    grid-template-columns: 18px 78px 1fr;
+    grid-template-columns: 18px 78px minmax(0, 1fr);
     gap: 11px;
   }
 
