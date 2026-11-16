@@ -309,8 +309,8 @@ export default function Settings() {
                 </button>
               </div>
               {aiTest && (
-                <div className="test-result">
-                  <span className={`dot ${aiTest.ok ? "ok" : "warn"}`} />
+                <div className={`test-result ${aiTest.ok ? "" : "error"}`}>
+                  <span className={`dot ${aiTest.ok ? "ok" : ""}`} />
                   {aiTest.text}
                 </div>
               )}
@@ -846,8 +846,8 @@ export default function Settings() {
               {cfgSaved && <span className="test-result"><span className="dot ok" />{cfgSaved}</span>}
             </div>
             {engine && (
-              <div className="test-result" style={{ marginTop: 8 }}>
-                <span className={`dot ${engine.ok ? "ok" : "warn"}`} />
+              <div className={`test-result ${engine.ok ? "" : "error"}`} style={{ marginTop: 8 }}>
+                <span className={`dot ${engine.ok ? "ok" : ""}`} />
                 {engine.text}
               </div>
             )}

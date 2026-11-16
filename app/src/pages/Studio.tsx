@@ -204,6 +204,7 @@ export default function Studio({
   const [flashParagraph, setFlashParagraph] = useState(0);
   const [lineStatus, setLineStatus] = useState<Record<string, "generating" | "error" | "">>({});
   const [toast, setToast] = useState("");
+  const [toastTone, setToastTone] = useState<"default" | "error">("default");
   const [genDialog, setGenDialog] = useState(false);
   const [roleMenu, setRoleMenu] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
@@ -429,7 +430,8 @@ export default function Studio({
     []
   );
 
-  function showToast(msg: string) {
+  function showToast(msg: string, tone: "default" | "error" = "default") {
+    setToastTone(tone);
     setToast(msg);
     window.setTimeout(() => setToast((cur) => (cur === msg ? "" : cur)), 4500);
   }
@@ -1647,7 +1649,7 @@ export default function Studio({
       setGenState("error");
       setLineStatus((prev) => ({ ...prev, [statusKey]: "error" }));
       setGenMsg((e as Error).message);
-      showToast(`第 ${line.id} 句失败：${(e as Error).message}`);
+      showToast(`第 ${line.id} 句失败：${(e as Error).message}`, "error");
       log("generate", "单句生成失败", {
         lineId: line.id,
         speaker: line.speaker,
@@ -2801,7 +2803,7 @@ export default function Studio({
         </div>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className={`toast ${toastTone === "error" ? "error" : ""}`}>{toast}</div>}
     </section>
   );
 }
