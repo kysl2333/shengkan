@@ -4,8 +4,6 @@ title Shengkan
 
 cd /d "%~dp0app"
 
-if not defined GRADIO_URL set "GRADIO_URL=http://127.0.0.1:7860"
-
 if not exist "node_modules\electron\dist\electron.exe" (
   echo Installing dependencies...
   call npm install
