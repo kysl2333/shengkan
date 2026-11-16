@@ -50,8 +50,15 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+let healthRequest: Promise<Health> | undefined;
+
 export function getHealth() {
-  return json<Health>(`${ENGINE}/health`);
+  if (!healthRequest) {
+    healthRequest = json<Health>(`${ENGINE}/health`).finally(() => {
+      healthRequest = undefined;
+    });
+  }
+  return healthRequest;
 }
 
 export function getVoices(q?: string) {
