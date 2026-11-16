@@ -7,6 +7,7 @@ import {
   trashProject,
   restoreProject,
   deleteForever,
+  emptyTrash,
 } from "../projects";
 import {
   formatSize,
@@ -166,13 +167,30 @@ export default function Library({
   }
 
   async function destroyFromTrash(item: TrashSummary) {
-    if (!window.confirm(`彻底删除「${item.title}」？\n\n删除后无法恢复。`)) return;
+    if (!window.confirm(`彻底删除「${item.title}」？\n\n项目文件和相关音频都会删除，无法恢复。`)) return;
     setTrashBusy(true);
     setTrashError("");
     try {
       await deleteForever(item.trashName);
       setTrashList(await listTrash());
       log("project", "彻底删除项目", { id: item.id, title: item.title });
+    } catch (e) {
+      setTrashError((e as Error).message);
+    } finally {
+      setTrashBusy(false);
+    }
+  }
+
+  async function clearTrash() {
+    if (!trashList.length) return;
+    if (!window.confirm(`清空回收站里的 ${trashList.length} 个项目？\n\n项目文件和相关音频都会删除，无法恢复。`)) return;
+    setTrashBusy(true);
+    setTrashError("");
+    try {
+      const result = await emptyTrash();
+      setTrashList(await listTrash());
+      await onRefresh();
+      log("project", "清空回收站", { count: result.count, failed: result.failed });
     } catch (e) {
       setTrashError((e as Error).message);
     } finally {
@@ -753,7 +771,7 @@ export default function Library({
             <div className="modal-head">
               <div>
                 <div className="modal-title">回收站</div>
-                <div className="modal-desc">删除的项目先放这里，可以还原，也可以彻底删除。</div>
+                <div className="modal-desc">删除的项目先放这里，可以还原，也可以彻底删除；彻底删除会一并清理项目音频。</div>
               </div>
               <button className="modal-close" aria-label="关闭" onClick={() => !trashBusy && setTrashOpen(false)}>✕</button>
             </div>
@@ -768,7 +786,10 @@ export default function Library({
                 <div className="trash-row" key={item.trashName}>
                   <div className="trash-info">
                     <b>{item.title}</b>
-                    <span>{item.chapters} 章 · {item.lines} 句 · 删除于 {formatTime(item.deletedAt)}</span>
+                    <span>
+                      {item.chapters} 章 · {item.lines} 句
+                      {item.size ? ` · ${formatSize(item.size)}` : ""} · 删除于 {formatTime(item.deletedAt)}
+                    </span>
                   </div>
                   <div className="trash-actions">
                     <button className="btn small" onClick={() => restoreFromTrash(item)} disabled={trashBusy}>还原</button>
@@ -779,6 +800,9 @@ export default function Library({
             </div>
 
             <div className="modal-foot">
+              {trashList.length > 0 && (
+                <button className="btn danger" onClick={clearTrash} disabled={trashBusy}>清空回收站</button>
+              )}
               <button className="btn" onClick={() => setTrashOpen(false)} disabled={trashBusy}>关闭</button>
             </div>
           </div>

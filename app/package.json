@@ -28,7 +28,8 @@
   },
   "build": {
     "appId": "com.shengkan.app",
-    "productName": "声栞",
+    "productName": "shengkan",
+    "artifactName": "shengkan-${version}-setup.${ext}",
     "directories": {
       "output": "../release"
     },
@@ -44,6 +45,11 @@
         "filter": [
           "**/*",
           "!outputs/**/*",
+          "!config.json",
+          "!engine.log",
+          "!test_tts.py",
+          "!start-engine.bat",
+          "!**/*.pyc",
           "!__pycache__/**/*"
         ]
       }
@@ -62,7 +68,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "声栞"
+      "shortcutName": "shengkan"
     }
   }
 }

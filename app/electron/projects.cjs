@@ -1,12 +1,10 @@
-const { app } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const paths = require("./paths.cjs");
 
-const ROOT =
-  process.env.SHENGKAN_PROJECTS ||
-  (app.isPackaged
-    ? path.join(app.getPath("documents"), "声栞 Projects")
-    : path.join(__dirname, "..", "..", "projects"));
+const ROOT = process.env.SHENGKAN_PROJECTS
+  ? path.resolve(process.env.SHENGKAN_PROJECTS)
+  : paths.PROJECTS;
 
 const TRASH = path.join(ROOT, ".trash");
 
@@ -56,6 +54,33 @@ function summary(project, dir) {
     updatedAt: project.updatedAt,
     dir,
   };
+}
+
+function dirSize(dir) {
+  let total = 0;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) total += dirSize(full);
+      else if (entry.isFile()) total += fs.statSync(full).size;
+    }
+  } catch {
+    /* 目录不可读就不计 */
+  }
+  return total;
+}
+
+function projectAudioFiles(project) {
+  const names = new Set();
+  for (const chapter of project.chapters || []) {
+    for (const line of chapter.lines || []) {
+      for (const url of [line.audio, ...(line.audioHistory || [])]) {
+        const name = path.basename(String(url || ""));
+        if (name) names.add(name);
+      }
+    }
+  }
+  return [...names];
 }
 
 function listProjects() {
@@ -133,6 +158,7 @@ function listTrash() {
         return {
           ...summary(project, dir),
           trashName: d.name,
+          size: dirSize(dir),
           deletedAt: new Date(
             Number.isFinite(stamp) ? stamp : fs.statSync(dir).mtimeMs
           ).toISOString(),
@@ -159,9 +185,48 @@ function restoreProject(trashName) {
 
 function deleteForever(trashName) {
   const target = path.join(TRASH, path.basename(trashName));
-  if (!fs.existsSync(target)) throw new Error("回收站里没有这个项目");
+  const file = path.join(target, "project.json");
+  if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
+
+  let project = null;
+  try {
+    project = readJson(file);
+  } catch {
+    /* 项目损坏也允许彻底删除 */
+  }
+
+  let removedAudio = 0;
+  if (project) {
+    for (const name of projectAudioFiles(project)) {
+      const audio = path.join(paths.OUTPUTS, name);
+      if (!fs.existsSync(audio)) continue;
+      try {
+        fs.unlinkSync(audio);
+        removedAudio += 1;
+      } catch {
+        /* 单个音频删不掉不影响项目删除 */
+      }
+    }
+  }
+
   fs.rmSync(target, { recursive: true, force: true });
-  return { ok: true };
+  return { ok: true, removedAudio };
+}
+
+function emptyTrash() {
+  fs.mkdirSync(TRASH, { recursive: true });
+  let count = 0;
+  let failed = 0;
+  for (const entry of fs.readdirSync(TRASH, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      deleteForever(entry.name);
+      count += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { ok: true, count, failed };
 }
 
 module.exports = {
@@ -173,6 +238,7 @@ module.exports = {
   listTrash,
   restoreProject,
   deleteForever,
+  emptyTrash,
   ROOT,
   TRASH,
 };

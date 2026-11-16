@@ -1,16 +1,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { app } = require("electron");
+const { ENGINE_DIR, CONFIG } = require("./paths.cjs");
 
-const ENGINE_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, "engine")
-  : path.join(__dirname, "..", "..", "engine");
-
-const FILE = path.join(ENGINE_DIR, "config.json");
+const FILE = CONFIG;
 
 const DEFAULTS = {
   mode: "gradio",
-  gradioUrl: "http://192.168.3.68:7860",
+  gradioUrl: "http://127.0.0.1:7860",
   gradioApi: "gen_single",
   voiceLib: "",
   python: "",

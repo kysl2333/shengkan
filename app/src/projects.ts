@@ -68,6 +68,18 @@ export interface ProjectSummary {
 export interface TrashSummary extends ProjectSummary {
   trashName: string;
   deletedAt: string;
+  size?: number;
+}
+
+export interface AppPaths {
+  userData: string;
+  documents: string;
+  projects: string;
+  voices: string;
+  outputs: string;
+  config: string;
+  logs: string;
+  engineLog: string;
 }
 
 export type ProjectAction = "rebuild" | "annotate";
@@ -157,6 +169,7 @@ interface ProjectsBridge {
   trashList: () => Promise<TrashSummary[]>;
   restore: (trashName: string) => Promise<ProjectSummary>;
   deleteForever: (trashName: string) => Promise<{ ok: boolean }>;
+  emptyTrash: () => Promise<{ ok: boolean; count: number; failed: number }>;
   root: () => Promise<string>;
 }
 
@@ -166,6 +179,9 @@ declare global {
       version: string;
       platform: string;
       projects: ProjectsBridge;
+      app: {
+        paths: () => Promise<AppPaths>;
+      };
       config: {
         get: () => Promise<EngineConfig>;
         set: (cfg: EngineConfig) => Promise<EngineConfig>;
@@ -360,4 +376,15 @@ export async function deleteForever(trashName: string): Promise<{ ok: boolean }>
   if (ipcAvailable()) return window.shengkan!.projects.deleteForever(trashName);
   writeTrash(readTrash().filter((x) => x.project.id !== trashName));
   return { ok: true };
+}
+
+export async function emptyTrash(): Promise<{ ok: boolean; count: number; failed: number }> {
+  if (ipcAvailable()) return window.shengkan!.projects.emptyTrash();
+  writeTrash([]);
+  return { ok: true, count: 0, failed: 0 };
+}
+
+export async function getAppPaths(): Promise<AppPaths | null> {
+  if (ipcAvailable()) return window.shengkan!.app.paths();
+  return null;
 }

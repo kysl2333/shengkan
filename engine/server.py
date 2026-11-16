@@ -4,10 +4,11 @@
     D:\\APP\\IndexTTS-2.0\\.venv\\Scripts\\python.exe engine\\server.py
 
 环境变量：
-    INDEXTTS_CODE_DIR   代码目录，默认 D:\\APP\\IndexTTS-2.0
-    INDEXTTS_MODEL_DIR  权重目录，默认 S:\\AI\\IndexTTS-2.5
+    INDEXTTS_CODE_DIR   代码目录，必填
+    INDEXTTS_MODEL_DIR  权重目录，必填
     INDEXTTS_VERSION    2.5 或 2.0，默认 2.5
     VOICE_LIB           音色参考音频目录
+    OUTPUT_DIR          生成音频目录
     ENGINE_PORT         端口，默认 8290
 """
 
@@ -26,8 +27,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-CODE_DIR = Path(os.environ.get("INDEXTTS_CODE_DIR", r"D:\APP\IndexTTS-2.0"))
-MODEL_DIR = Path(os.environ.get("INDEXTTS_MODEL_DIR", r"S:\AI\IndexTTS-2.5"))
+_CODE = os.environ.get("INDEXTTS_CODE_DIR", "").strip()
+_MODEL = os.environ.get("INDEXTTS_MODEL_DIR", "").strip()
+CODE_DIR = Path(_CODE).expanduser() if _CODE else None
+MODEL_DIR = Path(_MODEL).expanduser() if _MODEL else None
 INDEXTTS_VERSION = os.environ.get("INDEXTTS_VERSION", "2.5").strip()
 if INDEXTTS_VERSION not in {"2.0", "2.5"}:
     INDEXTTS_VERSION = "2.5"
@@ -35,7 +38,10 @@ VOICE_LIB = Path(
     os.environ.get("VOICE_LIB")
     or (Path(__file__).resolve().parent.parent / "voices")
 )
-OUT_DIR = Path(__file__).resolve().parent / "outputs"
+OUT_DIR = Path(
+    os.environ.get("OUTPUT_DIR")
+    or (Path(__file__).resolve().parent / "outputs")
+)
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="声栞 Engine", version="0.1.0")
@@ -77,8 +83,10 @@ def load_tts():
         if _tts is not None:
             return _tts
 
-        if not (MODEL_DIR / "config.yaml").is_file():
-            raise RuntimeError(f"模型目录缺少 config.yaml: {MODEL_DIR}")
+        if not CODE_DIR or not CODE_DIR.is_dir():
+            raise RuntimeError("请先在设置 → 语音引擎里填写 IndexTTS 代码目录")
+        if not MODEL_DIR or not (MODEL_DIR / "config.yaml").is_file():
+            raise RuntimeError(f"模型目录缺少 config.yaml: {MODEL_DIR or '未填写'}")
 
         sys.path.insert(0, str(CODE_DIR))
         os.chdir(str(CODE_DIR))
@@ -108,8 +116,8 @@ def health():
         "ok": True,
         "engine": f"indextts-{INDEXTTS_VERSION}",
         "version": INDEXTTS_VERSION,
-        "code_dir": str(CODE_DIR),
-        "model_dir": str(MODEL_DIR),
+        "code_dir": str(CODE_DIR or ""),
+        "model_dir": str(MODEL_DIR or ""),
         "model_loaded": _tts is not None,
         "gpu": gpu_info(),
     }

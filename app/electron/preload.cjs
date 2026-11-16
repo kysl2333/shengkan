@@ -12,7 +12,11 @@ contextBridge.exposeInMainWorld("shengkan", {
     trashList: () => ipcRenderer.invoke("projects:trash-list"),
     restore: (trashName) => ipcRenderer.invoke("projects:restore", trashName),
     deleteForever: (trashName) => ipcRenderer.invoke("projects:delete-forever", trashName),
+    emptyTrash: () => ipcRenderer.invoke("projects:empty-trash"),
     root: () => ipcRenderer.invoke("projects:root"),
+  },
+  app: {
+    paths: () => ipcRenderer.invoke("app:paths"),
   },
   config: {
     get: () => ipcRenderer.invoke("config:get"),

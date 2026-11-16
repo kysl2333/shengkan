@@ -13,7 +13,7 @@ const KEY = "shengkan:engine-config";
 
 const DEFAULTS: EngineConfig = {
   mode: "gradio",
-  gradioUrl: "http://192.168.3.68:7860",
+  gradioUrl: "http://127.0.0.1:7860",
   gradioApi: "gen_single",
   voiceLib: "",
   python: "",

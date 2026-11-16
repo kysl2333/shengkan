@@ -2,9 +2,11 @@
 node_modules/
 dist/
 release/
+release-check*/
 app/tsconfig.tsbuildinfo
 *.log
 *.tmp
+*.bak-*
 
 # 引擎运行产物
 engine/outputs/
@@ -15,6 +17,7 @@ engine/.preview/
 projects/
 voices/
 mcp/data/
+engine/config.json
 
 # 旧迁移包
 声栞迁移包/
