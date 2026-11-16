@@ -1,12 +1,24 @@
-# 声栞 · Shiori Voices
+<p align="center">
+  <img src="logo/shiori-logo.png" width="96" alt="声栞 logo">
+</p>
+
+<h1 align="center">声栞 · Shiori Voices</h1>
+
+<p align="center">本地 AI 台词配音工作台 · 把小说变成多角色有声书</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img alt="Download" src="https://img.shields.io/badge/Download-Windows-2f6b57?style=flat-square"></a>
+  <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-a9763c?style=flat-square">
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%2010%2F11-465a6b?style=flat-square">
+</p>
 
 本地 AI 台词配音工作台。把小说、剧本或同人文本拆成多角色台词，为每个角色匹配音色和情绪，逐句生成音频，最后合成整章有声书。
 
 声栞把「拆章、拆台词、认角色、配音、导出」放在一个桌面应用里。原文和项目保存在本机，只有你主动调用 AI 时，相关文本或音频才会发送给你配置的服务商。
 
-[下载最新安装包](../../releases/latest) · [版本里程碑](RELEASES.md) · [从源码运行](docs/DEVELOPMENT.md) · [MCP 接入](mcp/README.md)
+[⬇️ 下载最新安装包](../../releases/latest) · [🗺️ 版本里程碑](RELEASES.md) · [🛠️ 从源码运行](docs/DEVELOPMENT.md) · [🔌 MCP 接入](mcp/README.md)
 
-## 界面
+## 🖼️ 界面
 
 | 项目 | 工作台 |
 |---|---|
@@ -16,9 +28,9 @@
 
 截图使用示例项目「雨夜书店」，不含真实用户数据。
 
-## 功能
+## ✨ 功能
 
-### 导入与拆章
+### 📚 导入与拆章
 
 - 支持 `.txt`、`.md`、`.epub`、`.docx`
 - TXT 自动识别 UTF-8 / UTF-16 / GBK
@@ -26,7 +38,7 @@
 - 规则分章识别「第 X 章 / 回 / 节 / 卷」、序章、楔子、番外、Chapter N 等
 - 规则认不出时，可让文本 AI 识别章节；导入前可预览章数和字数
 
-### 台词与角色
+### 🎭 台词与角色
 
 - 规则拆句，保证原文一字不改
 - 说话人、情绪、语速由文本 AI 标注，可逐句手动修改
@@ -35,7 +47,7 @@
 - 引号里的名字不会被误判成说话人；电话、广播、录音里的声音会谨慎处理
 - 支持单章 AI 重拆、整本重拆章节、整本角色标注
 
-### 音色与生成
+### 🎙️ 音色与生成
 
 - 本地音色库：导入参考音频，按角色绑定
 - 本地 IndexTTS 2.0 / 2.5：通过 Gradio WebUI 或本机 Python 推理
@@ -46,7 +58,7 @@
 - 生成失败保留旧音频；每句最多保留两个版本，可随时回退
 - 语速 0.5–2.0，云 TTS 和本地 IndexTTS 都生效
 
-### 试听与成片
+### 🎧 试听与成片
 
 - 单句 / 连续试听，自动跟随当前句，可关闭跟随
 - 播放器支持拖动进度、0.5–3.0 倍速、暂停后继续
@@ -54,14 +66,14 @@
 - 整本单轨导出、整本分章节 ZIP
 - 成片时间轴按全章台词顺序排列，每个角色一条轨道
 
-### 其他
+### 🧰 其他
 
 - 日间 / 夜间主题
 - 项目回收站、保存冲突检测、恢复草稿
 - 可选 MCP 服务器，让外部 AI 读写项目
 - 开发日志本机保存，5 MB 自动轮转
 
-## 快速开始
+## 🚀 快速开始
 
 1. **安装并启动**：从 [Releases](../../releases/latest) 下载 `shengkan-*-setup.exe`，按提示安装。
 2. **配置文本 AI**：打开「设置 → AI 服务 → 文本 AI」，选择小米 MiMo、千问百炼、DeepSeek 或自定义 OpenAI 兼容服务，填入 Base URL、模型和 API Key，点「测试」确认连接，再点「保存 AI 配置」。
@@ -74,7 +86,7 @@
 
 > 第一次使用时项目库和音色库都是空的，不附带示例文章、示例项目或参考音频。你需要自己导入文本并准备音色。
 
-## 文本 AI 与 TTS AI
+## 🤖 文本 AI 与 TTS AI
 
 声栞把两类 AI 分开配置：
 
@@ -85,7 +97,7 @@
 
 两者可以用不同服务商和不同 Key。文本 AI 的分章和标注提示词可以在设置页查看、编辑和恢复内置；首次安装会显示完整默认提示词。
 
-## 本地引擎
+## 🖥️ 本地引擎
 
 本地配音不捆绑模型权重，需要先准备 IndexTTS 运行环境：
 
@@ -96,7 +108,7 @@
 
 如果你不想部署本地模型，可以直接使用云 TTS。
 
-## 数据与隐私
+## 🔒 数据与隐私
 
 安装版的数据位置：
 
@@ -115,18 +127,18 @@
 - 设置页会显示 AI 配置文件的路径，Key 在界面上始终打码。
 - 删除项目默认进入回收站；彻底删除只在回收站里执行。
 
-## 系统要求
+## 💻 系统要求
 
 - Windows 10 / 11 x64
 - 本地 IndexTTS：需要单独的 Python 环境和模型权重，建议使用 NVIDIA GPU
 - 云 TTS：需要对应服务商的 API Key 和网络连接
 - 安装包目前未做代码签名，Windows SmartScreen 可能提示「未知发布者」；确认来源后可选择仍要运行
 
-## 从源码运行
+## 🛠️ 从源码运行
 
 ```powershell
-git clone <仓库地址>
-cd 声栞
+git clone https://github.com/kysl2333/shengkan.git
+cd shengkan
 start.bat
 ```
 
@@ -134,7 +146,7 @@ start.bat
 
 开发模式、构建安装包、目录结构和接口说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。仓库命名、可见性、许可证和 Release 流程见 [docs/GITHUB.md](docs/GITHUB.md)。
 
-## 常见问题
+## ❓ 常见问题
 
 **生成时提示「音色库是空的」？**
 
@@ -156,14 +168,14 @@ EPUB 优先使用书内目录；TXT 可以先用规则分章，再对单章使�
 
 这是正常的。声栞不附带示例项目，第一次使用需要自己导入文本。
 
-## 参与贡献
+## 🤝 参与贡献
 
 - 提交前先看 [AGENTS.md](AGENTS.md) 和 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 前端改动至少跑 `cd app && npm.cmd run build`
 - 涉及工作台状态或生成流程时，再跑 `cd app && npm.cmd run check:studio`
 - 不要提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`
 
-## 许可证
+## 📄 许可证
 
 本项目使用 [GNU General Public License v3.0](LICENSE)（GPL-3.0）。
 
@@ -175,6 +187,6 @@ EPUB 优先使用书内目录；TXT 可以先用规则分章，再对单章使�
 
 Copyright (C) 2026 声栞项目作者
 
-## 免责声明
+## ⚠️ 免责声明
 
 声栞只提供文本拆分、配音和导出工具。请确保你拥有所处理文本和参考音频的使用权，并遵守所在地区法律及服务商条款。AI 生成的声音请勿用于冒充他人、诈骗或其他侵权用途。

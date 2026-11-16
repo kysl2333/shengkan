@@ -5,7 +5,7 @@
 ## 启动
 
 ```powershell
-cd "D:\AI工作空间\声栞\mcp"
+cd "D:\shengkan\mcp"
 npm install
 node server.mjs
 ```
@@ -117,7 +117,7 @@ MCP 客户端仍然决定要不要调用某个工具；声栞这一侧再按级�
   "mcpServers": {
     "shengkan": {
       "command": "node",
-      "args": ["D:/AI工作空间/声栞/mcp/server.mjs"]
+      "args": ["D:/shengkan/mcp/server.mjs"]
     }
   }
 }
@@ -130,10 +130,11 @@ MCP 客户端仍然决定要不要调用某个工具；声栞这一侧再按级�
 ```json
 {
   "mcp": {
-    "shengkan": {
-      "type": "local",
-      "command": ["node", "D:/AI工作空间/声栞/mcp/server.mjs"],
-      "enabled": true
+    "servers": {
+      "shengkan": {
+        "type": "local",
+        "command": ["node", "D:/shengkan/mcp/server.mjs"]
+      }
     }
   }
 }
@@ -163,7 +164,7 @@ MCP 客户端仍然决定要不要调用某个工具；声栞这一侧再按级�
 红点表示 MCP 进程没有成功启动，最常见原因是 `mcp/node_modules` 还没安装：
 
 ```powershell
-cd "D:\AI工作空间\声栞\mcp"
+cd "D:\shengkan\mcp"
 npm.cmd install
 node server.mjs
 ```
@@ -178,10 +179,9 @@ node server.mjs
     "servers": {
       "shengkan": {
         "type": "local",
-        "enabled": true,
         "command": [
           "C:/Program Files/nodejs/node.exe",
-          "D:/AI工作空间/声栞/mcp/server.mjs"
+          "D:/shengkan/mcp/server.mjs"
         ]
       }
     }

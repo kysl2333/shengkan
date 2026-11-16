@@ -693,7 +693,7 @@
 ### 背景
 
 - 清理文件时误删 D 盘，`app/src`、`app/electron`、`engine`、`docs`、`mcp`、`design`、`voices` 丢失
-- 从 `D:\AI工作空间\声栞\声栞迁移包` 恢复初始版本，再按会话记录重建
+- 从 `声栞迁移包` 恢复初始版本，再按会话记录重建
 - 保留现有 `projects` 和 `app/node_modules`，没有删除任何用户数据
 
 ### 恢复过程
