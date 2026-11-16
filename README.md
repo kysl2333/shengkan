@@ -26,7 +26,6 @@
 | **角色与音色** | **成片** |
 | ![角色与音色](docs/screenshots/03-cast.png) | ![成片](docs/screenshots/04-master.png) |
 
-截图使用示例项目「雨夜书店」，不含真实用户数据。
 
 ## ✨ 功能
 
@@ -167,13 +166,6 @@ EPUB 优先使用书内目录；TXT 可以先用规则分章，再对单章使�
 **安装后项目库是空的？**
 
 这是正常的。声栞不附带示例项目，第一次使用需要自己导入文本。
-
-## 🤝 参与贡献
-
-- 提交前先看 [AGENTS.md](AGENTS.md) 和 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- 前端改动至少跑 `cd app && npm.cmd run build`
-- 涉及工作台状态或生成流程时，再跑 `cd app && npm.cmd run check:studio`
-- 不要提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`
 
 ## 📄 许可证
 
