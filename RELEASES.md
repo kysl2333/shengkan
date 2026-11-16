@@ -26,7 +26,8 @@
 
 ### 📦 下载
 
-- `shengkan-1.0.1-setup.exe`，Windows 10 / 11 x64
+- [⬇️ shengkan-1.0.1-setup.exe](https://github.com/kysl2333/shengkan/releases/download/v1.0.1/shengkan-1.0.1-setup.exe)，Windows 10 / 11 x64
+- [🐙 GitHub Release](https://github.com/kysl2333/shengkan/releases/tag/v1.0.1)
 - 安装包未签名，Windows SmartScreen 可能提示「未知发布者」
 
 ### ⚠️ 已知限制

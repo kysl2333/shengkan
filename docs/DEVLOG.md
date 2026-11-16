@@ -17,6 +17,7 @@
 - 从 EXE 和安装包提取的图标都是新版「卷边纸页」
 - 用临时示例项目「雨夜书店」和临时 7860 mock Gradio 截取四个页面；截图保存在 `docs/screenshots/`
 - 截图环境使用临时 profile、项目、音色和输出目录，不涉及真实项目和音色
+- GitHub 仓库 `kysl2333/shengkan` 已创建并推送 `main`；Release v1.0.1 上传安装包，SHA-256 与本地一致
 
 ## 2026-11-17 · 发行版提示词、设置页操作和 GitHub 准备
 

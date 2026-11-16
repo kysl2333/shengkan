@@ -1,6 +1,6 @@
 # 发布到 GitHub
 
-这份文档只说明仓库命名、可见性、许可证和发布流程。当前已经安装 GitHub CLI（`gh`），并按官方 OAuth 方式连接 GitHub；还没有创建仓库。
+这份文档只说明仓库命名、可见性、许可证和发布流程。当前已经安装 GitHub CLI（`gh`），按官方 OAuth 方式连接 GitHub，并已发布到公开仓库。
 
 ## 当前状态
 
@@ -8,9 +8,10 @@
 - GitHub 账号：已通过 OAuth 登录，`gh auth status` 可查看当前账号
 - OpenCode GitHub MCP：已配置为 `github`，连接状态 `connected`
 - 当前工具组：`repos,users,context`（建仓库、读仓库、用户信息、当前账号）；需要 Issue/PR/Actions 时再扩展
-- 仓库：尚未创建，等待确定名称和可见性
-- 本地分支：`main`
+- 仓库：[kysl2333/shengkan](https://github.com/kysl2333/shengkan)（公开）
+- 本地分支：`main`，远端 `origin` 已配置
 - 安装包：`release/shengkan-1.0.1-setup.exe`，带最新 logo 和 GPL-3.0 `LICENSE`
+- Release：[v1.0.1](https://github.com/kysl2333/shengkan/releases/tag/v1.0.1)，已上传安装程序
 
 ## 在 OpenCode 里查看连接器
 
@@ -122,8 +123,9 @@ Release 附件只放最终安装包，不要放测试构建。安装包未签名
 - [x] 安装包在干净用户目录启动，项目库为空、默认提示词正常
 - [x] 仓库没有 API Key、`ai.json`、`projects/`、`voices/`、日志或参考音频
 - [x] README 的下载链接、系统要求、数据位置和许可证已更新
-- [ ] 决定仓库名和可见性
+- [x] 决定仓库名和可见性：`kysl2333/shengkan` · 公开
 - [x] 决定许可证并添加 `LICENSE`
+- [x] 发布 v1.0.1 并上传 `shengkan-1.0.1-setup.exe`
 
 ## 和 WorkBuddy 的关系
 

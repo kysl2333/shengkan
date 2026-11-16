@@ -33,7 +33,7 @@
 | MCP | 可用。26 个工具覆盖建项目、章节/台词、角色/音色、生成、导出、回收站和启动软件；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
 | 安装包 | 已生成 `release/shengkan-1.0.1-setup.exe`，带最新 logo 和 GPL-3.0 `LICENSE`；未签名；隔离验收入口 `release/start-isolated.cmd` |
-| Git | 只有 `main`；准备发布到 GitHub，尚未配置 remote；本地 `.scratch/` 已从索引移除 |
+| Git | 已发布到 https://github.com/kysl2333/shengkan（公开），远端 `origin` 已配置，Release v1.0.1 含安装包；本地 `.scratch/` 已从索引移除 |
 
 ## 事故说明
 

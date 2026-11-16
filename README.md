@@ -7,7 +7,7 @@
 <p align="center">本地 AI 台词配音工作台 · 把小说变成多角色有声书</p>
 
 <p align="center">
-  <a href="../../releases/latest"><img alt="Download" src="https://img.shields.io/badge/Download-Windows-2f6b57?style=flat-square"></a>
+  <a href="https://github.com/kysl2333/shengkan/releases/latest"><img alt="Download" src="https://img.shields.io/badge/Download-Windows-2f6b57?style=flat-square"></a>
   <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-a9763c?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%2010%2F11-465a6b?style=flat-square">
 </p>
@@ -16,7 +16,7 @@
 
 声栞把「拆章、拆台词、认角色、配音、导出」放在一个桌面应用里。原文和项目保存在本机，只有你主动调用 AI 时，相关文本或音频才会发送给你配置的服务商。
 
-[⬇️ 下载最新安装包](../../releases/latest) · [🗺️ 版本里程碑](RELEASES.md) · [🛠️ 从源码运行](docs/DEVELOPMENT.md) · [🔌 MCP 接入](mcp/README.md)
+[⬇️ 下载最新安装包](https://github.com/kysl2333/shengkan/releases/latest) · [🐙 GitHub 仓库](https://github.com/kysl2333/shengkan) · [🗺️ 版本里程碑](RELEASES.md) · [🛠️ 从源码运行](docs/DEVELOPMENT.md) · [🔌 MCP 接入](mcp/README.md)
 
 ## 🖼️ 界面
 

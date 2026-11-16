@@ -10,6 +10,7 @@
 - README 增加项目、工作台、角色与音色、成片四个页面的截图
 - 新增用户向版本里程碑 `RELEASES.md`
 - 安装包附带 GPL-3.0 `LICENSE`
+- 已发布到 GitHub 公开仓库 `kysl2333/shengkan`，Release v1.0.1 上传 `shengkan-1.0.1-setup.exe`
 
 ## 2026-11-17 · 发行版提示词、设置页操作和 GitHub 准备
 
