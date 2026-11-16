@@ -1,5 +1,30 @@
 # 开发记录
 
+## 2026-11-17 · 发行版提示词、设置页操作和 GitHub 准备
+
+### 完成
+
+- 设置页把「保存 AI 配置」放进当前 AI 分区的最后一个 `setting-group`，文本 AI 放在章节识别组末尾，TTS AI 放在云 TTS 组末尾
+- 提示词输入框保留内置默认值回退，并在下方标明「当前使用内置/自定义提示词」
+- 把旧 README 复制为 `docs/DEVELOPMENT.md`，根 README 改成用户安装和使用说明
+- `.scratch/` 从 Git 索引移除，文件仍保留在本机；`.gitignore` 增加密钥和证书文件
+- 安装版 `engine.cjs` 使用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1` 启动 Node 代理，避免要求用户安装 Node
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `npm.cmd run dist` 通过，生成 `release/shengkan-0.1.0-setup.exe`（约 122 MB）和 `release/win-unpacked/`
+- 解包 `app.asar` 确认包含 `defaultPrompts`、两段内置提示词、`settings-save-row` 和 `ELECTRON_RUN_AS_NODE`
+- 用独立用户目录启动打包版，设置页两个提示词输入框分别有 734 和 1193 个字符；项目库显示 0 个项目、0 句台词
+- 截图检查保存按钮位于表单组末尾，父元素为 `setting-group`，不再是独立的 `settings-actions`
+- 隐私扫描：63 个跟踪文件无真实 Key、无本机用户路径；唯一的 Key 形态命中是设计稿里的占位输入；打包产物未包含 `ai.json`、项目、音色、日志或参考音频
+
+### 待办
+
+- 安装包仍未做代码签名，Windows SmartScreen 会提示未知发布者
+- 应用图标仍是 Electron 默认图标，需要单独的 `.ico` 和 `build.icon` 配置
+- GitHub 远端尚未配置，等待仓库地址和许可证选择
+
 ## 2026-11-16 · 发行版准备：拼音路径、隐私清理和回收站
 
 ### 根因
@@ -45,7 +70,7 @@
 
 ### 坑
 
-- `app.getPath("documents")` 在 OneDrive 机器上指向 `OneDrive/Documents`，不能写死 `C:\Users\...\Documents`
+- `app.getPath("documents")` 在 OneDrive 机器上指向 OneDrive 下的 Documents，不能写死本地用户目录
 - `electron-builder --dir` 对旧 `release/win-unpacked.tmp` 报 EPERM，换 `--config.directories.output=../release-check2` 可绕过；不要直接删旧目录
 - `fs.rmSync` 只用于用户明确点「彻底删除/清空回收站」；项目普通删除仍走回收站
 - 安装包文件名、exe、安装目录必须是拼音；中文只放窗口标题、界面和介绍

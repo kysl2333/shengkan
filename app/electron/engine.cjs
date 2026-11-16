@@ -28,9 +28,14 @@ function portOpen(port) {
 
 const NODE_BIN =
   process.env.SHENGKAN_NODE ||
-  (fs.existsSync("C:\\Program Files\\nodejs\\node.exe")
-    ? "C:\\Program Files\\nodejs\\node.exe"
-    : "node");
+  (paths.PACKAGED
+    ? process.execPath
+    : fs.existsSync("C:\\Program Files\\nodejs\\node.exe")
+      ? "C:\\Program Files\\nodejs\\node.exe"
+      : "node");
+// 安装版用 Electron 自带的 Node 运行代理，避免要求用户另外安装 Node。
+const NODE_ENV =
+  paths.PACKAGED && NODE_BIN === process.execPath ? { ELECTRON_RUN_AS_NODE: "1" } : {};
 const ENGINE_LOG = paths.ENGINE_LOG;
 
 function logEngine(message) {
@@ -90,6 +95,7 @@ async function ensureEngine() {
       cwd: ENGINE_DIR,
       env: {
         ...process.env,
+        ...NODE_ENV,
         ENGINE_PORT: String(PORT),
         OUTPUT_DIR: paths.OUTPUTS,
         VOICE_LIB: cfg.voiceLib || paths.VOICES,

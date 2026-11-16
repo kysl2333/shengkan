@@ -50,6 +50,30 @@ function Row({ label, help, children }: { label: string; help: string; children:
   );
 }
 
+function SaveAiRow({
+  onSave,
+  saved,
+  disabled,
+}: {
+  onSave: () => void;
+  saved: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="settings-save-row">
+      <button className="btn primary" onClick={onSave} disabled={disabled}>
+        保存 AI 配置
+      </button>
+      {saved && (
+        <span className="test-result">
+          <span className="dot ok" />
+          {saved}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function maskedAiConfig(cfg: AiConfig | null) {
   if (!cfg) return "";
   const copy = JSON.parse(JSON.stringify(cfg)) as AiConfig;
@@ -627,6 +651,7 @@ export default function Settings() {
                 </div>
               </div>
             )}
+            <SaveAiRow onSave={saveAiCfg} saved={aiSaved} disabled={!aiCfg} />
           </div>
           )}
 
@@ -649,6 +674,11 @@ export default function Settings() {
                 >
                   恢复内置
                 </button>
+                <div className="setting-help">
+                  {aiCfg?.prompts?.chapter
+                    ? "当前使用自定义提示词；点「恢复内置」可回到默认内容。"
+                    : "当前使用内置提示词；首次安装也会显示完整默认内容。"}
+                </div>
               </div>
             </Row>
             <Row label="角色标注提示词" help="分台词后用它判断角色、情绪和语速。可在这里加自己的角色规则。">
@@ -667,6 +697,11 @@ export default function Settings() {
                 >
                   恢复内置
                 </button>
+                <div className="setting-help">
+                  {aiCfg?.prompts?.annotate
+                    ? "当前使用自定义提示词；点「恢复内置」可回到默认内容。"
+                    : "当前使用内置提示词；首次安装也会显示完整默认内容。"}
+                </div>
               </div>
             </Row>
             <div className="test-result" style={{ color: "var(--text-faint)" }}>
@@ -707,14 +742,11 @@ export default function Settings() {
             <Row label="台词拆分" help="断句始终用规则，保证原文一字不改；AI 只负责角色、情绪和语速。让 AI 断句容易改写原文或漏句，所以不提供。">
               <div className="test-result"><span className="dot ok" />规则拆分 · 不消耗 token</div>
             </Row>
+            <SaveAiRow onSave={saveAiCfg} saved={aiSaved} disabled={!aiCfg} />
           </div>
           </>
           )}
 
-          <div className="settings-actions">
-            <button className="btn primary" onClick={saveAiCfg} disabled={!aiCfg}>保存 AI 配置</button>
-            {aiSaved && <span className="test-result"><span className="dot ok" />{aiSaved}</span>}
-          </div>
           <div className="setting-group">
             <Row
               label="AI 配置文件"

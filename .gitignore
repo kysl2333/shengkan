@@ -13,11 +13,20 @@ engine/outputs/
 engine/__pycache__/
 engine/.preview/
 
-# 用户数据（不进版本库）
+# 用户数据和本地记录
 projects/
 voices/
 mcp/data/
 engine/config.json
+.scratch/
+
+# 密钥和本地配置
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
 
 # 旧迁移包
 声栞迁移包/
