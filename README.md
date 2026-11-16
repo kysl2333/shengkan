@@ -16,7 +16,7 @@
 
 声栞把「拆章、拆台词、认角色、配音、导出」放在一个桌面应用里。原文和项目保存在本机，只有你主动调用 AI 时，相关文本或音频才会发送给你配置的服务商。
 
-                   [⬇️ 下载最新安装包](https://github.com/kysl2333/shengkan/releases/latest) · [🗺️ 版本里程碑](RELEASES.md) · [🛠️ 从源码运行](docs/DEVELOPMENT.md) · [🔌 MCP 接入](mcp/README.md)
+[⬇️ 下载最新安装包](https://github.com/kysl2333/shengkan/releases/latest) · [🗺️ 版本里程碑](RELEASES.md) · [🛠️ 从源码运行](docs/DEVELOPMENT.md) · [🔌 MCP 接入](mcp/README.md)
 
 ## 🖼️ 界面
 
