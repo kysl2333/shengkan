@@ -13,7 +13,7 @@
 ### 验证
 
 - `npm.cmd run build` 通过
-- `npm.cmd run dist` 通过，生成 `release/shengkan-0.1.0-setup.exe`（约 122 MB）和 `release/win-unpacked/`
+- `npm.cmd run dist` 通过，生成 `release/shengkan-0.1.0-setup.exe`（约 122 MB）和 `release/win-unpacked/`；当前只是测试构建，等 logo 确定后再重新打包
 - 解包 `app.asar` 确认包含 `defaultPrompts`、两段内置提示词、`settings-save-row` 和 `ELECTRON_RUN_AS_NODE`
 - 用独立用户目录启动打包版，设置页两个提示词输入框分别有 734 和 1193 个字符；项目库显示 0 个项目、0 句台词
 - 截图检查保存按钮位于表单组末尾，父元素为 `setting-group`，不再是独立的 `settings-actions`
