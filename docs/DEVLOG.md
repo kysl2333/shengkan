@@ -39,6 +39,12 @@
 - `fs.rmSync` 只用于用户明确点「彻底删除/清空回收站」；项目普通删除仍走回收站
 - 安装包文件名、exe、安装目录必须是拼音；中文只放窗口标题、界面和介绍
 
+### 合并和清理
+
+- `release/prepare` 已合并回 `main` 并删除；当前只有 `main`
+- 旧中文目录 `声栞 Projects`、`声栞 Voices`，两个 `release-check*` 验证包和 `AGENTS.md.bak` 已移到回收站
+- `engine/config.json` 不再进版本库，工作区保留本机配置；模板是 `engine/config.example.json`
+
 ## 2026-11-16 · TTS 卡片、云音色试听和 MCP 全流程
 
 ### 根因

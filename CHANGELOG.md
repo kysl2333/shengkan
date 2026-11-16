@@ -36,6 +36,12 @@
 - `electron-builder --dir` 打包成功，`resources/engine` 只含 `config.example.json`、`node-server.mjs`、`server.py`、`wav.mjs`
 - 打包版启动后创建 `shengkan-projects`、`shengkan-voices`、`%APPDATA%/shengkan/outputs`、`logs`
 
+### 仓库
+
+- `release/prepare` 已合并回 `main` 并删除，当前只有 `main`
+- 旧中文目录、`release-check*` 验证包和 `AGENTS.md.bak` 已移到回收站
+- `engine/config.json` 不再进版本库，模板改为 `engine/config.example.json`
+
 ## 2026-11-16 · TTS 卡片、云音色试听和 MCP 全流程
 
 ### 设置

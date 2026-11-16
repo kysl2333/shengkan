@@ -25,7 +25,7 @@
 
 ## Git
 
-- 仓库根目录就是本目录，主分支 `main`。`design/ui-refresh` 已合并进 `main`，已合并的 `optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理；后续直接在 `main` 开发。
+- 仓库根目录就是本目录，主分支 `main`。`design/ui-refresh` 已合并进 `main`；`release/prepare` 已完成发行版准备并合并回 `main`，分支已删除；当前只保留 `main`。
 - 新功能或大改可以开短分支，合并后用 `git branch -d` 清理；不要强推、不要重写已合并的历史。
 - 每次提交前更新 `CHANGELOG.md`（用户可见改动）和 `docs/DEVLOG.md`（验证结果、踩坑）。
 - 提交信息用 `type: 简述`，例如 `fix: 生成失败不再删除旧音频`、`docs: 记录 MCP 配置`。
@@ -41,9 +41,9 @@ Electron (React UI)
 engine/node-server.mjs        ← 当前默认，远端 Gradio 代理
    │  /gradio_api/call/gen_single
    ▼
-IndexTTS WebUI (192.168.3.68:7860)
+IndexTTS WebUI (127.0.0.1:7860，可在设置里改)
 
-可选：engine/server.py → 本机 IndexTTS 2.5
+可选：engine/server.py → 本机 IndexTTS 2.0 / 2.5
 
 云 TTS：小米 MiMo / 千问 TTS（DashScope）/ 自定义 OpenAI 兼容
    │  角色绑定 cloudVoice 时，Electron 主进程 cloud-tts.cjs 直接调用

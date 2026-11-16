@@ -33,7 +33,7 @@
 | MCP | 可用。26 个工具覆盖建项目、章节/台词、角色/音色、生成、导出、回收站和启动软件；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
 | 安装包 | 可生成 `shengkan.exe`；项目/音色/音频/配置/日志都走用户目录；中文名只留在界面和介绍 |
-| Git | 在 `release/prepare` 分支做发行版准备，完成后合并回 `main` |
+| Git | 只有 `main`；`release/prepare` 已完成发行版准备并合并回 `main`，分支已删除 |
 
 ## 事故说明
 
