@@ -224,7 +224,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 支持 `.docx` 导入：`app/src/import/docx.ts` 按 `word/document.xml` 的段落提取正文，再走规则分章。
 - 导入弹窗只能点 ✕ / 关闭退出，不能点遮罩关闭；关闭后保留上次文本、AI 分章结果，避免重新识别。
 - 语速统一存 0.5-2.0 数字：1 正常，小于 1 更慢，大于 1 更快。本地 IndexTTS 传 `duration_factor = 1 / speed`，云 TTS 写进自然语言指令。
-- 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地 1 并发；取消时已发出的请求返回后停止。
+- 批量生成用 `runPool`：包含云音色时 2 并发，全本地 1 并发；失败重试串行，取消时已发出的请求返回后停止。
 - 成片导出历史存 `localStorage`（`shengkan:exports:<projectId>`），因为 Master 切页会卸载；文件名用「书名-章节名」。
 - `voiceHistory` 记录角色用过的音色，绑定/解绑/删除音色时写入，最多 12 条，可单条移除。
 - 默认界面缩放 0.9，窗口 1600×1000；顶栏和 master head 必须允许换行。
