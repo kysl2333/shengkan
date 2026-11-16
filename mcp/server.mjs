@@ -187,6 +187,15 @@ function deny(action) {
   };
 }
 
+function engineErrorMessage(value) {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(engineErrorMessage).filter(Boolean).join("；");
+  if (!value || typeof value !== "object") return "";
+  const message = engineErrorMessage(value.error) || engineErrorMessage(value.detail) || engineErrorMessage(value.msg);
+  const location = Array.isArray(value.loc) ? value.loc.map(String).join(".") : "";
+  return message && location ? `${location}：${message}` : message;
+}
+
 async function engineCall(endpoint, payload, timeout = 180000) {
   let response;
   try {
@@ -207,7 +216,7 @@ async function engineCall(endpoint, payload, timeout = 180000) {
     /* 非 JSON 响应 */
   }
   if (!response.ok) {
-    throw new Error(data?.error || `引擎返回 HTTP ${response.status}`);
+    throw new Error(engineErrorMessage(data) || `引擎返回 HTTP ${response.status}`);
   }
   return data;
 }
@@ -228,7 +237,7 @@ async function engineGet(endpoint, timeout = 15000) {
     /* 非 JSON 响应 */
   }
   if (!response.ok) {
-    throw new Error(data?.error || `引擎返回 HTTP ${response.status}`);
+    throw new Error(engineErrorMessage(data) || `引擎返回 HTTP ${response.status}`);
   }
   return data;
 }

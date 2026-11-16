@@ -37,6 +37,16 @@ export interface Segment {
   paragraph?: number;
 }
 
+function errorMessage(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value)) return value.map(errorMessage).filter(Boolean).join("；");
+  if (!value || typeof value !== "object") return "";
+  const data = value as Record<string, unknown>;
+  const message = errorMessage(data.error) || errorMessage(data.detail) || errorMessage(data.msg);
+  const location = Array.isArray(data.loc) ? data.loc.map(String).join(".") : "";
+  return message && location ? `${location}：${message}` : message;
+}
+
 async function json<T>(url: string, init?: RequestInit, timeout = 120_000): Promise<T> {
   const r = await fetch(url, {
     ...init,
@@ -45,7 +55,13 @@ async function json<T>(url: string, init?: RequestInit, timeout = 120_000): Prom
   });
   if (!r.ok) {
     const body = await r.text().catch(() => "");
-    throw new Error(body || `HTTP ${r.status}`);
+    let message = body;
+    try {
+      message = errorMessage(JSON.parse(body)) || body;
+    } catch {
+      /* 非 JSON 错误保留原文 */
+    }
+    throw new Error(message || `HTTP ${r.status}`);
   }
   return r.json() as Promise<T>;
 }
