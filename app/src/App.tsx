@@ -24,7 +24,7 @@ import {
 const CAST_COLORS = ["#2f6b57", "#a9763c", "#a94f38", "#465a6b", "#6b7d5e", "#8a6a4f"];
 
 export default function App() {
-  const [page, setPage] = useState<PageID>("studio");
+  const [page, setPage] = useState<PageID>("library");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
@@ -43,6 +43,7 @@ export default function App() {
         if (list[0]) {
           const p = await loadProject(list[0].id);
           setProject(p);
+          setPage("studio");
         }
       })
       .catch((err) => console.error("加载项目失败", err));

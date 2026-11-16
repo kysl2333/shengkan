@@ -1,5 +1,44 @@
 # 开发记录
 
+## 2026-11-16 · 发行版准备：拼音路径、隐私清理和回收站
+
+### 根因
+
+- 安装版 `voices`、`engine/outputs`、`engine/config.json` 都指向 `resources`，Program Files 下可能只读
+- `cloud-tts.cjs`、`engine.cjs`、`projects.cjs` 各自拼路径，开发版/打包版条件分散
+- `engine/config.json` 被版本库跟踪，里面有作者局域网地址；`engine.log`、`outputs` 会进安装包
+- 回收站彻底删除只删项目目录，`engine/outputs` 里的音频残留
+- 设置页没有打开配置文件夹的入口
+- `productName` 是中文，会生成中文 exe、安装目录和快捷方式文件名
+
+### 完成
+
+- 新增 `app/electron/paths.cjs`：开发版用仓库路径，打包版用 `文档/shengkan-projects`、`文档/shengkan-voices`、`%APPDATA%/shengkan/outputs|engine.json|logs`
+- `config.cjs`、`engine.cjs`、`cloud-tts.cjs`、`projects.cjs` 统一走 `paths.cjs`；引擎子进程通过 `OUTPUT_DIR`、`VOICE_LIB`、`SHENGKAN_ENGINE_CONFIG` 接收
+- `node-server.mjs`、`server.py` 支持 `OUTPUT_DIR`；`server.py` 的代码/模型目录改为必填，不再写死作者路径
+- `package.json` 的 `productName` 改为 `shengkan`，`shortcutName` 改为 `shengkan`，安装包 artifact 用拼音
+- `extraResources` 排除 `config.json`、`engine.log`、`outputs`、`test_tts.py`、`start-engine.bat`、`__pycache__`
+- `engine/config.json` 取消版本跟踪，新增 `engine/config.example.json`
+- 新安装默认空项目/空音色；没有项目时默认停在项目库
+- 回收站增加大小、章节、台词、删除时间，彻底删除清理音频，新增清空回收站
+- 设置 → 开发与 MCP 增加「配置文件夹」，显示并打开 `%APPDATA%/shengkan`
+- 云音色本地样本文件名改为 `voice-<id>.wav`，不再用中文音色名做文件名；上传远端参考音频也用 ASCII 临时名
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `npm.cmd run check:studio` 通过：20/20
+- 回收站 Electron 测试 6/6：移入、大小、章节/台词、彻底删除音频、目录删除、清空
+- `electron-builder --dir` 打包成功，`shengkan.exe`，`resources/engine` 只含代码和 `config.example.json`
+- 打包版启动创建 `shengkan-projects`、`shengkan-voices`、`%APPDATA%/shengkan/outputs`、`logs`
+
+### 坑
+
+- `app.getPath("documents")` 在 OneDrive 机器上指向 `OneDrive/Documents`，不能写死 `C:\Users\...\Documents`
+- `electron-builder --dir` 对旧 `release/win-unpacked.tmp` 报 EPERM，换 `--config.directories.output=../release-check2` 可绕过；不要直接删旧目录
+- `fs.rmSync` 只用于用户明确点「彻底删除/清空回收站」；项目普通删除仍走回收站
+- 安装包文件名、exe、安装目录必须是拼音；中文只放窗口标题、界面和介绍
+
 ## 2026-11-16 · TTS 卡片、云音色试听和 MCP 全流程
 
 ### 根因

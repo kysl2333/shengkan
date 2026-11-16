@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { ensureEngine, stopEngine } = require("./engine.cjs");
 const projects = require("./projects.cjs");
+const paths = require("./paths.cjs");
 const { readConfig, writeConfig } = require("./config.cjs");
 const ai = require("./ai.cjs");
 const logs = require("./log.cjs");
@@ -16,7 +17,18 @@ ipcMain.handle("projects:trash", (_event, id) => projects.trashProject(id));
 ipcMain.handle("projects:trash-list", () => projects.listTrash());
 ipcMain.handle("projects:restore", (_event, trashName) => projects.restoreProject(trashName));
 ipcMain.handle("projects:delete-forever", (_event, trashName) => projects.deleteForever(trashName));
+ipcMain.handle("projects:empty-trash", () => projects.emptyTrash());
 ipcMain.handle("projects:root", () => projects.ROOT);
+ipcMain.handle("app:paths", () => ({
+  userData: app.getPath("userData"),
+  documents: app.getPath("documents"),
+  projects: paths.PROJECTS,
+  voices: paths.VOICES,
+  outputs: paths.OUTPUTS,
+  config: paths.CONFIG,
+  logs: paths.LOGS,
+  engineLog: paths.ENGINE_LOG,
+}));
 ipcMain.handle("config:get", () => readConfig());
 ipcMain.handle("config:set", (_event, cfg) => writeConfig(cfg));
 ipcMain.handle("ai:config:get", () => ai.readAiConfig());
@@ -71,6 +83,10 @@ ipcMain.handle("shell:reveal", (_event, file) => {
     const dir = path.dirname(file);
     if (!fs.existsSync(dir)) throw new Error(`目录不存在：${dir}`);
     shell.openPath(dir);
+    return { ok: true };
+  }
+  if (fs.statSync(file).isDirectory()) {
+    shell.openPath(file);
     return { ok: true };
   }
   shell.showItemInFolder(file);

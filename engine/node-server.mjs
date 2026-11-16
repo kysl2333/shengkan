@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { readWav, resample, normalize, writeWav, writeZip } from "./wav.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const OUT = path.join(here, "outputs");
+const OUT = process.env.OUTPUT_DIR
+  ? path.resolve(process.env.OUTPUT_DIR)
+  : path.join(here, "outputs");
 fs.mkdirSync(OUT, { recursive: true });
 
-const CONFIG_FILE = path.join(here, "config.json");
+const CONFIG_FILE = process.env.SHENGKAN_ENGINE_CONFIG || path.join(here, "config.json");
 let fileConfig = {};
 try {
   fileConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
@@ -20,9 +22,10 @@ try {
 let GRADIO = (
   process.env.GRADIO_URL ||
   fileConfig.gradioUrl ||
-  "http://192.168.3.68:7860"
+  "http://127.0.0.1:7860"
 ).replace(/\/$/, "");
 let GRADIO_API = process.env.GRADIO_API || fileConfig.gradioApi || "gen_single";
+let INDEXTTS_VERSION = process.env.INDEXTTS_VERSION || fileConfig.indexttsVersion || "2.5";
 const VOICES =
   process.env.VOICE_LIB || fileConfig.voiceLib || path.join(here, "..", "voices");
 const PORT = Number(process.env.ENGINE_PORT || 8290);
@@ -132,7 +135,7 @@ async function uploadVoice(localPath) {
   form.append(
     "files",
     new Blob([fs.readFileSync(localPath)], { type: "audio/wav" }),
-    path.basename(localPath)
+    `voice-${crypto.randomUUID()}.wav`
   );
   const r = await fetch(`${GRADIO}/gradio_api/upload`, {
     method: "POST",
@@ -565,14 +568,17 @@ const server = http.createServer(async (req, res) => {
         return json(res, {
           gradioUrl: GRADIO,
           gradioApi: GRADIO_API,
-          indexttsVersion: fileConfig.indexttsVersion || "2.5",
+          indexttsVersion: INDEXTTS_VERSION,
         });
       }
       if (req.method === "POST") {
         const body = await readBody(req);
         if (body.gradioUrl) GRADIO = String(body.gradioUrl).trim().replace(/\/$/, "");
         if (body.gradioApi) GRADIO_API = String(body.gradioApi).trim();
-        if (body.indexttsVersion) fileConfig.indexttsVersion = String(body.indexttsVersion);
+        if (body.indexttsVersion) {
+          fileConfig.indexttsVersion = String(body.indexttsVersion);
+          INDEXTTS_VERSION = fileConfig.indexttsVersion;
+        }
         apiSpec = null;
         fileConfig = {
           ...fileConfig,
@@ -584,7 +590,7 @@ const server = http.createServer(async (req, res) => {
           ok: true,
           gradioUrl: GRADIO,
           gradioApi: GRADIO_API,
-          indexttsVersion: fileConfig.indexttsVersion || "2.5",
+          indexttsVersion: INDEXTTS_VERSION,
         });
       }
     }
@@ -608,7 +614,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, {
         ok: reachable,
         engine: "node-gradio-proxy",
-        version: fileConfig.indexttsVersion || "2.5",
+        version: INDEXTTS_VERSION,
         mode: "gradio",
         gradio: GRADIO,
         api: GRADIO_API,

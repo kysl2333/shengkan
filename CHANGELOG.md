@@ -2,6 +2,40 @@
 
 按时间倒序。每次改动功能、配置结构或启动方式，都在这里加一条。
 
+## 2026-11-16 · 发行版准备：拼音路径、隐私清理和回收站
+
+### 安装和数据路径
+
+- 安装包、exe、安装目录、快捷方式、项目/音色目录全部用 `shengkan` 拼音，中文名只留在界面、介绍和 logo
+- 安装版项目在 `文档/shengkan-projects`，音色在 `文档/shengkan-voices`
+- 安装版生成音频、引擎配置、日志、AI 配置都在 `%APPDATA%/shengkan`
+- 开发版继续用仓库下的 `projects/`、`voices/`、`engine/outputs/`、`engine/config.json`
+- 打包排除 `engine/config.json`、`engine.log`、`outputs`、`test_tts.py`、`start-engine.bat`、`__pycache__`
+
+### 默认空内容
+
+- 新安装项目库、音色库、回收站都是空的，不带示例文章或示例项目
+- 没有项目时默认停在项目库；有项目才自动进入工作台
+- 默认引擎地址改为 `http://127.0.0.1:7860`，不再带作者局域网地址
+
+### 回收站
+
+- 回收站显示项目大小、章节、台词和删除时间
+- 彻底删除会清理项目的当前音频和历史音频
+- 新增「清空回收站」，确认后清理所有项目和音频
+
+### 设置
+
+- 「开发与 MCP」新增「配置文件夹」，显示 `%APPDATA%/shengkan`、项目、音色和音频路径，可直接打开
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `npm.cmd run check:studio` 通过：20/20
+- 回收站 Electron 测试通过：6/6
+- `electron-builder --dir` 打包成功，`resources/engine` 只含 `config.example.json`、`node-server.mjs`、`server.py`、`wav.mjs`
+- 打包版启动后创建 `shengkan-projects`、`shengkan-voices`、`%APPDATA%/shengkan/outputs`、`logs`
+
 ## 2026-11-16 · TTS 卡片、云音色试听和 MCP 全流程
 
 ### 设置

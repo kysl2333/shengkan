@@ -1,12 +1,11 @@
-const { app } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const net = require("node:net");
 const fs = require("node:fs");
+const paths = require("./paths.cjs");
+const { readConfig } = require("./config.cjs");
 
-const ENGINE_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, "engine")
-  : path.join(__dirname, "..", "..", "engine");
+const ENGINE_DIR = paths.ENGINE_DIR;
 const NODE_SERVER = path.join(ENGINE_DIR, "node-server.mjs");
 const PY_SERVER = path.join(ENGINE_DIR, "server.py");
 const PORT = Number(process.env.SHENGKAN_ENGINE_PORT || 8290);
@@ -27,20 +26,12 @@ function portOpen(port) {
   });
 }
 
-function readEngineConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(ENGINE_DIR, "config.json"), "utf8"));
-  } catch {
-    return {};
-  }
-}
-
 const NODE_BIN =
   process.env.SHENGKAN_NODE ||
   (fs.existsSync("C:\\Program Files\\nodejs\\node.exe")
     ? "C:\\Program Files\\nodejs\\node.exe"
     : "node");
-const ENGINE_LOG = path.join(ENGINE_DIR, "engine.log");
+const ENGINE_LOG = paths.ENGINE_LOG;
 
 function logEngine(message) {
   try {
@@ -55,7 +46,7 @@ async function ensureEngine() {
     return { started: false, reason: "already-running", port: PORT };
   }
 
-  const cfg = readEngineConfig();
+  const cfg = readConfig();
   const mode = cfg.mode || "gradio";
   logEngine(`ensureEngine mode=${mode} node=${NODE_BIN} server=${NODE_SERVER}`);
   const out = (() => {
@@ -78,11 +69,13 @@ async function ensureEngine() {
       ...process.env,
       ENGINE_PORT: String(PORT),
       PYTHONIOENCODING: "utf-8",
+      OUTPUT_DIR: paths.OUTPUTS,
+      VOICE_LIB: cfg.voiceLib || paths.VOICES,
+      INDEXTTS_VERSION: cfg.indexttsVersion || "2.5",
+      SHENGKAN_ENGINE_CONFIG: paths.CONFIG,
     };
     if (cfg.indexttsCodeDir) env.INDEXTTS_CODE_DIR = cfg.indexttsCodeDir;
     if (cfg.indexttsModelDir) env.INDEXTTS_MODEL_DIR = cfg.indexttsModelDir;
-    if (cfg.indexttsVersion) env.INDEXTTS_VERSION = cfg.indexttsVersion;
-    if (cfg.voiceLib) env.VOICE_LIB = cfg.voiceLib;
     child = spawn(python, [PY_SERVER], {
       cwd: ENGINE_DIR,
       env,
@@ -98,7 +91,11 @@ async function ensureEngine() {
       env: {
         ...process.env,
         ENGINE_PORT: String(PORT),
-        GRADIO_URL: process.env.GRADIO_URL || cfg.gradioUrl || "",
+        OUTPUT_DIR: paths.OUTPUTS,
+        VOICE_LIB: cfg.voiceLib || paths.VOICES,
+        INDEXTTS_VERSION: cfg.indexttsVersion || "2.5",
+        SHENGKAN_ENGINE_CONFIG: paths.CONFIG,
+        GRADIO_URL: process.env.GRADIO_URL || cfg.gradioUrl || "http://127.0.0.1:7860",
         GRADIO_API: process.env.GRADIO_API || cfg.gradioApi || "gen_single",
       },
       windowsHide: true,

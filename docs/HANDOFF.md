@@ -32,7 +32,8 @@
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。26 个工具覆盖建项目、章节/台词、角色/音色、生成、导出、回收站和启动软件；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
-| Git | 已初始化。`design/ui-refresh` 已合并到 `main`；`optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理，只保留 `main` |
+| 安装包 | 可生成 `shengkan.exe`；项目/音色/音频/配置/日志都走用户目录；中文名只留在界面和介绍 |
+| Git | 在 `release/prepare` 分支做发行版准备，完成后合并回 `main` |
 
 ## 事故说明
 
@@ -80,12 +81,12 @@ npm.cmd run check:studio
 
 ## 配置
 
-`engine/config.json`：
+开发版 `engine/config.json`；安装版 `%APPDATA%/shengkan/engine.json`（设置页保存时创建）。
 
 ```json
 {
   "mode": "gradio",
-  "gradioUrl": "http://192.168.3.68:7860",
+  "gradioUrl": "http://127.0.0.1:7860",
   "gradioApi": "gen_single",
   "voiceLib": "",
   "python": "",
@@ -95,21 +96,26 @@ npm.cmd run check:studio
 }
 ```
 
-设置页可以改，保存后重启生效。环境变量 `GRADIO_URL` / `GRADIO_API` / `VOICE_LIB` 可临时覆盖。
+设置页可以改，保存后重启生效。环境变量 `GRADIO_URL` / `GRADIO_API` / `VOICE_LIB` / `OUTPUT_DIR` / `INDEXTTS_VERSION` 可临时覆盖。
 
 ## 数据
 
 | 数据 | 位置 |
 |---|---|
-| 项目 | `projects/<项目名>/project.json` |
-| 项目回收站 | `projects/.trash/` |
-| 生成音频 | `engine/outputs/*.wav` |
-| 参考音频 | `voices/*.wav` + `voices/meta.json` |
-| 设计音色 | `voices/cloud/*.wav` + `voices/cloud.json` |
+| 项目（开发版） | `projects/<项目 id>/project.json` |
+| 项目（安装版） | `文档/shengkan-projects/<项目 id>/project.json` |
+| 项目回收站 | 项目目录下的 `.trash/` |
+| 生成音频（开发版） | `engine/outputs/*.wav` |
+| 生成音频（安装版） | `%APPDATA%/shengkan/outputs/*.wav` |
+| 参考音频（开发版） | `voices/*.wav` + `voices/meta.json` |
+| 参考音频（安装版） | `文档/shengkan-voices/*.wav` + `meta.json` |
+| 设计音色 | `voices/cloud/*.wav` + `voices/cloud.json`（安装版在 `shengkan-voices/cloud`） |
 | 云音色试听缓存 | `voices/.cloud-samples/*.wav`，删除云音色时同步清理 |
-| 引擎配置 | `engine/config.json` |
+| 引擎配置（开发版） | `engine/config.json` |
+| 引擎配置（安装版） | `%APPDATA%/shengkan/engine.json` |
 | AI 配置 | `%APPDATA%/shengkan/ai.json` |
 | 开发日志 | `%APPDATA%/shengkan/logs/app.log` |
+| 引擎日志 | 开发版 `engine/engine.log`；安装版 `%APPDATA%/shengkan/logs/engine.log` |
 | MCP 审计 | `mcp/data/audit.jsonl` |
 
 ## 已知限制
@@ -143,7 +149,7 @@ npm.cmd run check:studio
 - 语速范围 0.5-2.0；云 TTS 用自然语言指令，本地 IndexTTS 用 `duration_factor`
 - 成片历史只记录本机导出结果，不会同步到别的机器
 - 主题选择只保存在本机 `localStorage`，换机器或清缓存后回到日间
-- 安装包模式下的 `voices` 路径还没验证，目前按源码目录运行
+- 安装版路径已验证：项目/音色在 `文档/shengkan-projects`、`文档/shengkan-voices`，音频/配置/日志在 `%APPDATA%/shengkan`；旧的中文目录不会自动迁移
 - 旧项目的错误角色不会自动清理，用「清理无效角色」或整本角色标注
 - 远端 WebUI 关掉后生成报连接失败
 - `release/` 里的安装包是旧构建
@@ -152,8 +158,7 @@ npm.cmd run check:studio
 
 1. 恢复 `voices/*.wav` 参考音频
 2. 重新导入之前那本书，或恢复 41 章项目
-3. 确认后删除无引用的 `app/src/data.ts`、`app/src/defaultVoices.ts`
-4. 重新构建安装包，并验证安装版 `voices` / `engine/outputs` 路径
-5. 应用图标
-6. MCP 修改后界面实时刷新
-7. 暂停/继续生成
+3. 应用图标
+4. MCP 修改后界面实时刷新
+5. 暂停/继续生成
+6. 如果要兼容旧安装版，再加中文目录到拼音目录的迁移提示

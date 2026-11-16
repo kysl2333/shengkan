@@ -1,14 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { app } = require("electron");
 const ai = require("./ai.cjs");
+const paths = require("./paths.cjs");
 
-const ENGINE_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, "engine")
-  : path.join(__dirname, "..", "..", "engine");
-const OUT = path.join(ENGINE_DIR, "outputs");
-const VOICES = path.join(__dirname, "..", "..", "voices");
+const OUT = paths.OUTPUTS;
+const VOICES = paths.VOICES;
 const CLOUD_DIR = path.join(VOICES, "cloud");
 const CLOUD_JSON = path.join(VOICES, "cloud.json");
 const PREVIEW_DIR = path.join(VOICES, ".preview");
@@ -236,15 +233,8 @@ function relPath(file) {
   return path.relative(VOICES, file).split(path.sep).join("/");
 }
 
-function safeName(name) {
-  return String(name || "voice")
-    .replace(/[\\/:*?"<>|]/g, "")
-    .trim()
-    .slice(0, 20) || "voice";
-}
-
-function localSample(name, id) {
-  return `${safeName(name)}-${id}.wav`;
+function localSample(id) {
+  return `voice-${id}.wav`;
 }
 
 function findLocalSample(id) {
@@ -385,7 +375,7 @@ async function materialize(id) {
   const item = list().find((voice) => voice.id === id);
   if (!item) throw new Error("找不到云音色");
 
-  const local = findLocalSample(item.id) || localSample(item.name, item.id);
+  const local = findLocalSample(item.id) || localSample(item.id);
   const dest = path.join(VOICES, local);
 
   if (!fs.existsSync(dest)) {

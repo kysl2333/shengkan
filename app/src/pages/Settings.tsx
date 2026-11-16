@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getHealth } from "../api";
 import { getEngineConfig, setEngineConfig, type EngineConfig } from "../config";
 import { getAiConfig, setAiConfig, testAi, getDefaultPrompts, listModels, getAiConfigPath, type AiConfig, type ModelListResult } from "../ai";
-import { revealFile } from "../projects";
+import { revealFile, getAppPaths, type AppPaths } from "../projects";
 import { clearLog, log, logInfo, openLog, type LogInfo } from "../log";
 
 const nav = ["AI 服务", "语音引擎", "开发与 MCP"];
@@ -163,6 +163,7 @@ export default function Settings() {
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
   const [logPath, setLogPath] = useState("");
+  const [appPaths, setAppPaths] = useState<AppPaths | null>(null);
   const [logMeta, setLogMeta] = useState<LogInfo | null>(null);
   const [logNotice, setLogNotice] = useState("");
   const [promptDefaults, setPromptDefaults] = useState({ chapter: "", annotate: "" });
@@ -171,6 +172,7 @@ export default function Settings() {
     getEngineConfig().then(setCfg).catch(() => {});
     getAiConfig().then(setAiCfg).catch(() => {});
     getAiConfigPath().then(setAiPath).catch(() => {});
+    getAppPaths().then(setAppPaths).catch(() => {});
     getDefaultPrompts().then(setPromptDefaults).catch(() => {});
     logInfo().then((info) => {
       if (!info) return;
@@ -925,6 +927,36 @@ export default function Settings() {
                 ))}
               </div>
             </Row>
+          </div>
+
+          <div className="setting-group">
+            <Row
+              label="配置文件夹"
+              help="AI 配置、引擎配置、日志和生成音频都在这里；项目在「文档/shengkan-projects」，音色在「文档/shengkan-voices」。"
+            >
+              <div className="input-row">
+                <input
+                  className="input"
+                  value={appPaths?.userData ?? ""}
+                  readOnly
+                  placeholder="配置文件夹"
+                />
+                <button
+                  className="btn small"
+                  onClick={() => appPaths && revealFile(appPaths.userData)}
+                  disabled={!appPaths}
+                >
+                  打开
+                </button>
+              </div>
+            </Row>
+            {appPaths && (
+              <div className="tool-help">
+                <div>项目：{appPaths.projects}</div>
+                <div>音色：{appPaths.voices}</div>
+                <div>音频：{appPaths.outputs}</div>
+              </div>
+            )}
           </div>
           </>
           )}
