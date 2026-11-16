@@ -13,6 +13,8 @@ import {
   loadProject,
   saveProject,
   createProject,
+  preserveProjectDraft,
+  recoverProjectLock,
   type Project,
   type ProjectCast,
   type ProjectChapter,
@@ -34,6 +36,8 @@ export default function App() {
   const [studioBusy, setStudioBusy] = useState(false);
   const [reloadConfirm, setReloadConfirm] = useState(false);
   const [reloadEpoch, setReloadEpoch] = useState(0);
+  const [recoveryNotice, setRecoveryNotice] = useState("");
+  const [recoveringLock, setRecoveringLock] = useState(false);
   const draftRef = useRef<Project | null>(null);
   const saveErrorRef = useRef("");
   const dragDepth = useRef(0);
@@ -93,7 +97,10 @@ export default function App() {
   async function persist(next: Project) {
     draftRef.current = next;
     setProject(next);
-    if (saveErrorRef.current) return false;
+    if (saveErrorRef.current) {
+      await preserveDraft(next);
+      return false;
+    }
     try {
       const s = await saveProject(next);
       setProjects((prev) => {
@@ -106,7 +113,30 @@ export default function App() {
       const message = (err as Error).message || "项目保存失败";
       saveErrorRef.current = message;
       setSaveError(message);
+      await preserveDraft(draftRef.current ?? next);
       return false;
+    }
+  }
+
+  async function preserveDraft(draft: Project) {
+    try {
+      const file = await preserveProjectDraft(draft);
+      setRecoveryNotice(`恢复草稿已保存：${file}`);
+    } catch (error) {
+      setRecoveryNotice(`自动保留草稿失败，请先下载副本：${(error as Error).message}`);
+    }
+  }
+
+  async function recoverStoppedWriter() {
+    if (!project || studioBusy || recoveringLock) return;
+    setRecoveringLock(true);
+    try {
+      const result = await recoverProjectLock(project.id);
+      setRecoveryNotice(result.recovered ? "已恢复退出进程的遗留锁，请保留草稿后重新载入最新项目。" : "没有可恢复的遗留锁，请保留草稿后重新载入最新项目。");
+    } catch (error) {
+      setRecoveryNotice(`未恢复锁：${(error as Error).message}`);
+    } finally {
+      setRecoveringLock(false);
     }
   }
 
@@ -131,6 +161,7 @@ export default function App() {
       setReloadEpoch((value) => value + 1);
       saveErrorRef.current = "";
       setSaveError("");
+      setRecoveryNotice("");
       setReloadConfirm(false);
       setProjects(await listProjects());
     } catch (error) {
@@ -225,10 +256,16 @@ export default function App() {
           <div>
             <b>保存已暂停，当前内容尚未写入磁盘</b>
             <p>{saveError}</p>
+            {recoveryNotice && <p>{recoveryNotice}</p>}
             <span>当前草稿仍保留在本窗口。请先下载副本，再重新载入磁盘上的最新项目；关闭窗口会丢失未保存内容。</span>
           </div>
           <div className="save-conflict-actions">
             <button className="btn" onClick={downloadDraft}>下载草稿副本</button>
+            {saveError.includes("PROJECT_BUSY") && (
+              <button className="btn" onClick={recoverStoppedWriter} disabled={studioBusy || recoveringLock}>
+                {recoveringLock ? "检查锁持有者…" : "恢复已退出进程的锁"}
+              </button>
+            )}
             <button className="btn" disabled={studioBusy} onClick={() => setReloadConfirm(true)}>
               {studioBusy ? "等待任务收尾…" : "重新载入最新项目"}
             </button>

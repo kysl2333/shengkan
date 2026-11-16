@@ -167,6 +167,9 @@ interface ProjectsBridge {
   list: () => Promise<ProjectSummary[]>;
   load: (id: string) => Promise<Project>;
   save: (project: Project) => Promise<ProjectSummary>;
+  preserveDraft?: (project: Project) => Promise<string>;
+  recoverLock?: (id: string) => Promise<{ ok: boolean; recovered: number }>;
+  recoverTrashLock?: (trashName: string) => Promise<{ ok: boolean; recovered: number }>;
   create: (title: string) => Promise<Project>;
   trash: (id: string) => Promise<{ ok: boolean; trashName: string }>;
   trashList: () => Promise<TrashSummary[]>;
@@ -373,7 +376,29 @@ export async function createProject(title: string): Promise<Project> {
   return project;
 }
 
+export async function preserveProjectDraft(project: Project): Promise<string> {
+  const preserve = window.shengkan?.projects.preserveDraft;
+  if (!preserve) throw new Error("当前环境不支持恢复草稿，请下载草稿副本");
+  return preserve(project);
+}
+
+export async function recoverProjectLock(id: string) {
+  const recover = window.shengkan?.projects.recoverLock;
+  if (!recover) throw new Error("当前环境不支持锁恢复");
+  const result = await recover(id);
+  if (!result.ok) throw new Error("锁未恢复，请保留草稿并确认锁持有者状态");
+  return result;
+}
+
 const TRASH_KEY = "shengkan:trash";
+
+export async function recoverTrashLock(trashName: string) {
+  const recover = window.shengkan?.projects.recoverTrashLock;
+  if (!recover) throw new Error("当前环境不支持回收站锁恢复");
+  const result = await recover(trashName);
+  if (!result.ok) throw new Error("回收站锁未恢复，请确认锁持有者状态");
+  return result;
+}
 
 function readTrash(): { project: Project; deletedAt: string }[] {
   try {

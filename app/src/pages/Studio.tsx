@@ -945,6 +945,7 @@ export default function Studio({
   }
 
   async function applyAnnotation(baseLines: ProjectLine[], baseCasts: ProjectCast[], context = "") {
+    if (genStopRef.current) throw new Error("AI 任务已停止，未开始新的标注请求");
     const roster = baseCasts
       .filter((c) => c.name && c.name !== "旁白")
       .map((c) => (c.desc && c.desc !== "待匹配音色" ? `${c.name}（${c.desc}）` : c.name))
@@ -993,6 +994,7 @@ export default function Studio({
       return;
     }
 
+    genStopRef.current = false;
     setAnnotating(true);
     setTask("running");
     setLogs([]);
@@ -1072,6 +1074,7 @@ export default function Studio({
     }
     if (!window.confirm("会先用规则重新拆句，再调 AI 分析角色、标注情绪和语速。\n\n思考模式通常需要 2–10 分钟；慢一些，但角色和语气判断更准。继续？")) return;
 
+    genStopRef.current = false;
     setView("source");
     setTask("running");
     setLogs([]);
@@ -1095,6 +1098,11 @@ export default function Studio({
 
     try {
       const r = await splitText(source);
+      if (genStopRef.current) {
+        setTask("idle");
+        addLog("已停止，保留当前台词");
+        return;
+      }
       const baseLines: ProjectLine[] = r.segments.map((s, j) => ({
         id: j + 1,
         speaker: s.speaker,
@@ -1131,9 +1139,19 @@ export default function Studio({
         }
         addLog(`AI 分析角色：新增 ${added} 个`);
       } catch (e) {
+        if (genStopRef.current) {
+          setTask("idle");
+          addLog("已停止，未开始新的标注请求");
+          return;
+        }
         addLog(`AI 角色分析失败，继续用规则结果：${(e as Error).message}`);
       }
 
+      if (genStopRef.current) {
+        setTask("idle");
+        addLog("已停止，未开始新的标注请求");
+        return;
+      }
       addLog("开始 AI 标注角色、情绪和语速（整章 · 开启思考）");
       const { next, casts, changed, res } = await applyAnnotation(
         baseLines,

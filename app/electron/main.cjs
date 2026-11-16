@@ -3,6 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { ensureEngine, stopEngine } = require("./engine.cjs");
 const projects = require("./projects.cjs");
+const recoveryDrafts = require("./recovery-drafts.cjs");
 const paths = require("./paths.cjs");
 const { readConfig, writeConfig } = require("./config.cjs");
 const ai = require("./ai.cjs");
@@ -11,7 +12,22 @@ const cloud = require("./cloud-tts.cjs");
 
 ipcMain.handle("projects:list", () => projects.listProjects());
 ipcMain.handle("projects:load", (_event, id) => projects.loadProject(id));
-ipcMain.handle("projects:save", (_event, project) => projects.saveProject(project));
+ipcMain.handle("projects:save", (_event, project) => {
+  try {
+    return projects.saveProject(project);
+  } catch (error) {
+    let recovery;
+    try {
+      recovery = `恢复草稿：${recoveryDrafts.preserve(projects.ROOT, project)}`;
+    } catch (draftError) {
+      recovery = `恢复草稿失败：${draftError.message}`;
+    }
+    throw new Error(`${error.message}\n${recovery}`);
+  }
+});
+ipcMain.handle("projects:preserve-draft", (_event, project) => recoveryDrafts.preserve(projects.ROOT, project));
+ipcMain.handle("projects:recover-lock", (_event, id) => projects.recoverLock(id));
+ipcMain.handle("projects:recover-trash-lock", (_event, trashName) => projects.recoverTrashLock(trashName));
 ipcMain.handle("projects:create", (_event, title) => projects.createProject(title));
 ipcMain.handle("projects:trash", (_event, id) => projects.trashProject(id));
 ipcMain.handle("projects:trash-list", () => projects.listTrash());

@@ -154,7 +154,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 主题存在 `<html data-theme="light|dark">`，选择写 `localStorage` 的 `shengkan:theme`；默认 `light`，`index.html` 在 React 前先读，避免闪白。
 - 颜色只用 `styles.css` 里的语义 token：`--accent` 是操作，`--brass` 是时间，`--danger` 是错误/删除；不要在组件里写死颜色。
 - 每章台词保存时整本 `project.json` 重写，暂时没有增量保存。
-- Electron/MCP 项目保存统一走 `app/electron/project-store.cjs`，在排他锁内校验内容版本；`__storageVersion` 仅用于传输，不写入 JSON。冲突不覆盖，音频清理必须在项目保存成功后执行；不要自动抢占遗留锁。
+- Electron/MCP 项目保存统一走 `app/electron/project-store.cjs`，在排他锁内校验内容版本；`__storageVersion` 仅用于传输，不写入 JSON。回收站操作也须参与源/目标文件锁，锁放在不会随项目移动的稳定位置。冲突不覆盖，音频清理必须在项目保存成功后执行；失败草稿保存到项目根 `.recovery/`，仅显式恢复可确认持有进程已退出的锁，不抢占活锁或未知锁。
 - 删除项目一律走 `projects.cjs` 的 `trashProject`，不要直接 `fs.rm` 项目目录。彻底删除只在回收站里做。
 - 页面不要引入重型状态库，现有 `useState` + props 足够。
 - 不引入原生模块依赖；Electron 打包要跨机器可用，纯 JS 优先。

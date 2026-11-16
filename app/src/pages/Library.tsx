@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSummary, TrashSummary, ProjectAction } from "../projects";
 import {
   listTrash,
+  recoverTrashLock,
   loadProject,
   saveProject,
   trashProject,
@@ -165,6 +166,20 @@ export default function Library({
       log("project", "从回收站还原", { id: item.id, title: item.title });
     } catch (e) {
       setTrashError((e as Error).message);
+    } finally {
+      setTrashBusy(false);
+    }
+  }
+
+  async function recoverTrashWriter(item: TrashSummary) {
+    setTrashBusy(true);
+    try {
+      const result = await recoverTrashLock(item.trashName);
+      setTrashError(result.recovered
+        ? `「${item.title}」已恢复 ${result.recovered} 个已退出进程的遗留锁，请重试原操作。`
+        : `「${item.title}」没有可恢复的遗留锁；若操作仍被阻止，请检查还原目标的活动项目锁。`);
+    } catch (error) {
+      setTrashError(`未恢复「${item.title}」的锁：${(error as Error).message}`);
     } finally {
       setTrashBusy(false);
     }
@@ -797,6 +812,9 @@ export default function Library({
                   </div>
                   <div className="trash-actions">
                     <button className="btn small" onClick={() => restoreFromTrash(item)} disabled={trashBusy}>还原</button>
+                    {trashError.includes("PROJECT_BUSY") && (
+                      <button className="btn small" onClick={() => recoverTrashWriter(item)} disabled={trashBusy}>恢复遗留锁</button>
+                    )}
                     <button className="btn small danger" onClick={() => destroyFromTrash(item)} disabled={trashBusy}>彻底删除</button>
                   </div>
                 </div>

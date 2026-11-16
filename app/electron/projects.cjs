@@ -112,7 +112,11 @@ function loadProject(id) {
 function saveProject(project) {
   if (!project?.id) throw new Error("项目缺少 id");
   const dir = findDirById(project.id);
-  fs.mkdirSync(dir, { recursive: true });
+  if (project.__storageVersion === undefined || project.__storageVersion === null) {
+    const error = new Error("PROJECT_CONFLICT：项目缺少读取版本，请重新载入后再保存。");
+    error.code = "PROJECT_CONFLICT";
+    throw error;
+  }
   const saved = projectStore.write(
     path.join(dir, "project.json"),
     { ...project, updatedAt: new Date().toISOString() },
@@ -141,19 +145,21 @@ function createProject(title) {
 function trashProject(id) {
   const dir = findDirById(id);
   const file = path.join(dir, "project.json");
-  if (!fs.existsSync(file)) throw new Error(`项目不存在: ${id}`);
-
   fs.mkdirSync(TRASH, { recursive: true });
   const target = path.join(TRASH, `${path.basename(dir)}__${Date.now()}`);
-  fs.renameSync(dir, target);
-  return { ok: true, trashName: path.basename(target) };
+  return projectStore.withFiles([file, path.join(target, "project.json")], () => {
+    if (!fs.existsSync(file)) throw new Error(`项目不存在: ${id}`);
+    if (fs.existsSync(target)) throw new Error("回收站目标已存在，请重试。");
+    fs.renameSync(dir, target);
+    return { ok: true, trashName: path.basename(target) };
+  });
 }
 
 function listTrash() {
   fs.mkdirSync(TRASH, { recursive: true });
   return fs
     .readdirSync(TRASH, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && !d.name.startsWith("."))
     .map((d) => {
       const dir = path.join(TRASH, d.name);
       const file = path.join(dir, "project.json");
@@ -178,45 +184,53 @@ function listTrash() {
 }
 
 function restoreProject(trashName) {
+  if (path.basename(trashName).startsWith(".")) throw new Error("回收站项目名不合法");
   const src = path.join(TRASH, path.basename(trashName));
   const file = path.join(src, "project.json");
-  if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
 
   const base = path.basename(trashName).split("__")[0] || `restored-${Date.now()}`;
   let target = path.join(ROOT, base);
   if (fs.existsSync(target)) target = path.join(ROOT, `${base}-restored-${Date.now()}`);
-  fs.renameSync(src, target);
-  return summary(readJson(path.join(target, "project.json")), target);
+  return projectStore.withFiles([file, path.join(target, "project.json")], () => {
+    if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
+    if (fs.existsSync(target)) throw new Error("还原目标已存在，请重试。");
+    const project = readJson(file);
+    fs.renameSync(src, target);
+    return summary(project, target);
+  });
 }
 
 function deleteForever(trashName) {
+  if (path.basename(trashName).startsWith(".")) throw new Error("回收站项目名不合法");
   const target = path.join(TRASH, path.basename(trashName));
   const file = path.join(target, "project.json");
-  if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
+  return projectStore.withFiles([file], () => {
+    if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
 
-  let project = null;
-  try {
-    project = readJson(file);
-  } catch {
-    /* 项目损坏也允许彻底删除 */
-  }
+    let project = null;
+    try {
+      project = readJson(file);
+    } catch {
+      /* 项目损坏也允许彻底删除 */
+    }
 
-  let removedAudio = 0;
-  if (project) {
-    for (const name of projectAudioFiles(project)) {
-      const audio = path.join(paths.OUTPUTS, name);
-      if (!fs.existsSync(audio)) continue;
-      try {
-        fs.unlinkSync(audio);
-        removedAudio += 1;
-      } catch {
-        /* 单个音频删不掉不影响项目删除 */
+    fs.rmSync(target, { recursive: true, force: true });
+    let removedAudio = 0;
+    if (project) {
+      for (const name of projectAudioFiles(project)) {
+        const audio = path.join(paths.OUTPUTS, name);
+        if (!fs.existsSync(audio)) continue;
+        try {
+          fs.unlinkSync(audio);
+          removedAudio += 1;
+        } catch {
+          /* 单个音频删不掉不影响项目删除 */
+        }
       }
     }
-  }
 
-  fs.rmSync(target, { recursive: true, force: true });
-  return { ok: true, removedAudio };
+    return { ok: true, removedAudio };
+  });
 }
 
 function emptyTrash() {
@@ -224,7 +238,7 @@ function emptyTrash() {
   let count = 0;
   let failed = 0;
   for (const entry of fs.readdirSync(TRASH, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     try {
       deleteForever(entry.name);
       count += 1;
@@ -233,6 +247,21 @@ function emptyTrash() {
     }
   }
   return { ok: true, count, failed };
+}
+
+function recoverLock(id) {
+  const result = projectStore.recover(path.join(findDirById(id), "project.json"));
+  return { ...result, recovered: result.recovered.length };
+}
+
+function recoverTrashLock(trashName) {
+  if (typeof trashName !== "string" || !trashName || trashName !== path.basename(trashName) || trashName.startsWith(".") || /[\\/:]/.test(trashName)) {
+    throw new Error("回收站项目名不合法");
+  }
+  const file = path.join(TRASH, trashName, "project.json");
+  if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
+  const result = projectStore.recover(file);
+  return { ...result, recovered: result.recovered.length };
 }
 
 module.exports = {
@@ -245,6 +274,8 @@ module.exports = {
   restoreProject,
   deleteForever,
   emptyTrash,
+  recoverLock,
+  recoverTrashLock,
   ROOT,
   TRASH,
 };
