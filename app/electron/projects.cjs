@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const paths = require("./paths.cjs");
+const projectStore = require("./project-store.cjs");
 
 const ROOT = process.env.SHENGKAN_PROJECTS
   ? path.resolve(process.env.SHENGKAN_PROJECTS)
@@ -38,7 +39,7 @@ function findDirById(id) {
 }
 
 function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  return projectStore.read(file).project;
 }
 
 function summary(project, dir) {
@@ -112,9 +113,13 @@ function saveProject(project) {
   if (!project?.id) throw new Error("项目缺少 id");
   const dir = findDirById(project.id);
   fs.mkdirSync(dir, { recursive: true });
-  project.updatedAt = new Date().toISOString();
-  fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify(project, null, 2), "utf8");
-  return summary(project, dir);
+  const saved = projectStore.write(
+    path.join(dir, "project.json"),
+    { ...project, updatedAt: new Date().toISOString() },
+    project.__storageVersion
+  );
+  Object.assign(project, saved.project);
+  return { ...summary(saved.project, dir), __storageVersion: saved.version };
 }
 
 function createProject(title) {
@@ -128,8 +133,9 @@ function createProject(title) {
     casts: [],
     chapters: [],
   };
-  saveProject(project);
-  return project;
+  const dir = projectDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  return projectStore.write(path.join(dir, "project.json"), project, null).project;
 }
 
 function trashProject(id) {

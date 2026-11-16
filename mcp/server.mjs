@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import projectStore from "../app/electron/project-store.cjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(here, "data");
@@ -16,6 +17,7 @@ const AUDIT = path.join(DATA, "audit.jsonl");
 const ENGINE = process.env.SHENGKAN_ENGINE || "http://127.0.0.1:8290";
 
 let currentFile = null;
+const projectVersions = new WeakMap();
 
 const PROJECT_ARG = z
   .string()
@@ -123,7 +125,9 @@ function readProject(query) {
   const file = findProjectFile(query);
   let project;
   try {
-    project = readJson(file);
+    const loaded = projectStore.read(file);
+    project = loaded.project;
+    projectVersions.set(project, { file, version: loaded.version });
   } catch (e) {
     throw new Error(`项目文件损坏，无法解析：${file}（${e.message}）`);
   }
@@ -132,14 +136,22 @@ function readProject(query) {
 }
 
 function writeProject(project) {
-  if (!currentFile) throw new Error("还没有打开项目，先调用 read_project");
-  project.updatedAt = new Date().toISOString();
+  const source = projectVersions.get(project);
+  if (!source) throw new Error("项目没有读取版本，请先读取项目后再保存");
   try {
-    fs.writeFileSync(currentFile, JSON.stringify(project, null, 2), "utf8");
+    const saved = projectStore.write(
+      source.file,
+      { ...project, updatedAt: new Date().toISOString() },
+      source.version
+    );
+    Object.assign(project, saved.project);
+    projectVersions.set(project, { file: source.file, version: saved.version });
   } catch (e) {
-    throw new Error(`写入项目失败：${currentFile}（${e.message}）`);
+    const error = new Error(`写入项目失败：${source.file}（${e.message}）`);
+    error.code = e.code;
+    throw error;
   }
-  return currentFile;
+  return source.file;
 }
 
 function audit(action, detail) {
@@ -495,8 +507,13 @@ server.tool(
       const dir = path.join(PROJECTS, id);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "project.json");
-      project.updatedAt = new Date().toISOString();
-      fs.writeFileSync(file, JSON.stringify(project, null, 2), "utf8");
+      const saved = projectStore.write(
+        file,
+        { ...project, updatedAt: new Date().toISOString() },
+        null
+      );
+      Object.assign(project, saved.project);
+      projectVersions.set(project, { file, version: saved.version });
       currentFile = file;
       audit("create_project", {
         project: id,
@@ -655,12 +672,6 @@ server.tool(
     if (!chapter) return { ...text(`章节不存在: ${chapterId}`), isError: true };
 
     const stale = chapter.lines.flatMap((line) => [line.audio, ...(line.audioHistory || [])]);
-    await Promise.allSettled(
-      stale
-        .filter(Boolean)
-        .map((url) => engineCall("/v1/audio-delete", { url }, 10000))
-    );
-
     chapter.lines = lines.map((line, index) => ({
       id: index + 1,
       speaker: String(line.speaker || "未知").trim() || "未知",
@@ -673,6 +684,11 @@ server.tool(
     }));
     ensureCasts(p, chapter.lines);
     writeProject(p);
+    await Promise.allSettled(
+      stale
+        .filter(Boolean)
+        .map((url) => engineCall("/v1/audio-delete", { url }, 10000))
+    );
     audit("replace_chapter_lines", {
       project: p.id,
       chapterId,
@@ -742,10 +758,10 @@ server.tool(
     const index = chapter.lines.findIndex((line) => line.id === lineId);
     if (index < 0) return { ...text("台词不存在"), isError: true };
     const [removed] = chapter.lines.splice(index, 1);
+    writeProject(p);
     for (const url of [removed.audio, ...(removed.audioHistory || [])].filter(Boolean)) {
       await engineCall("/v1/audio-delete", { url }, 10000).catch(() => {});
     }
-    writeProject(p);
     audit("delete_line", { project: p.id, chapterId, lineId, text: removed.text });
     return text({ ok: true, removed });
   }
@@ -984,16 +1000,20 @@ server.tool(
       });
 
       const history = [...(line.audioHistory || [])];
+      const stale = [];
       if (line.audio) history.push(line.audio);
       while (history.length > 1) {
         const dropped = history.shift();
-        if (dropped) engineCall("/v1/audio-delete", { url: dropped }, 10000).catch(() => {});
+        if (dropped) stale.push(dropped);
       }
       line.audio = data.url;
       line.audioHistory = history;
       line.status = "done";
 
       writeProject(p);
+      for (const url of stale) {
+        engineCall("/v1/audio-delete", { url }, 10000).catch(() => {});
+      }
       audit("generate_line", { project: p.id, chapterId, lineId, file: data.file });
       return text({ ok: true, file: data.file, url: data.url });
     } catch (e) {
@@ -1045,16 +1065,20 @@ server.tool(
           emo_alpha: 0.85,
         });
         const history = [...(line.audioHistory || [])];
+        const stale = [];
         if (line.audio) history.push(line.audio);
         while (history.length > 1) {
           const dropped = history.shift();
-          if (dropped) engineCall("/v1/audio-delete", { url: dropped }, 10000).catch(() => {});
+          if (dropped) stale.push(dropped);
         }
         line.audio = data.url;
         line.audioHistory = history;
         line.status = "done";
         result.ok += 1;
         writeProject(p);
+        for (const url of stale) {
+          engineCall("/v1/audio-delete", { url }, 10000).catch(() => {});
+        }
       } catch (e) {
         result.fail += 1;
         result.errors.push({ lineId: line.id, error: e.message });
@@ -1097,6 +1121,7 @@ server.tool(
       const batch = targets.slice(0, remaining);
       remaining -= batch.length;
       const result = { chapterId: chapter.id, title: chapter.title, ok: 0, fail: 0, skipped: 0 };
+      const stale = [];
       for (const line of batch) {
         const cast = p.casts.find((item) => item.name === line.speaker);
         if (cast?.cloudModel && cast.cloudVoice) {
@@ -1120,7 +1145,7 @@ server.tool(
           if (line.audio) history.push(line.audio);
           while (history.length > 1) {
             const dropped = history.shift();
-            if (dropped) engineCall("/v1/audio-delete", { url: dropped }, 10000).catch(() => {});
+            if (dropped) stale.push(dropped);
           }
           line.audio = data.url;
           line.audioHistory = history;
@@ -1131,6 +1156,9 @@ server.tool(
         }
       }
       writeProject(p);
+      for (const url of stale) {
+        engineCall("/v1/audio-delete", { url }, 10000).catch(() => {});
+      }
       chapters.push(result);
     }
 

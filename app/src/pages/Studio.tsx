@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getHealth, getVoices, splitText, synthesize, audioUrl, deleteAudio, type Segment } from "../api";
+import { getHealth, getVoices, splitText, synthesize, audioUrl, deleteAudio as deleteAudioFile, type Segment } from "../api";
 import { annotateLines, cancelAi, onAiProgress, extractCasts, emptyAiUsage, addAiUsage } from "../ai";
 import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
@@ -143,16 +143,20 @@ function carryOverLines(fresh: ProjectLine[], oldLines: ProjectLine[]) {
 
 export default function Studio({
   project,
-  onSave,
+  onSave: saveProjectDraft,
   action,
   onActionDone,
   active = true,
+  saveBlocked = false,
+  onBusyChange,
 }: {
   project: Project | null;
-  onSave: (p: Project) => void;
+  onSave: (p: Project) => void | Promise<boolean>;
   action?: ProjectAction | null;
   onActionDone?: () => void;
   active?: boolean;
+  saveBlocked?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [chapterId, setChapterId] = useState(project?.chapters[0]?.id ?? "");
   const chapter = project?.chapters.find((c) => c.id === chapterId) ?? project?.chapters[0];
@@ -214,6 +218,35 @@ export default function Studio({
   const chapterIdRef = useRef(chapterId);
   const scriptScrollRef = useRef<HTMLDivElement | null>(null);
   const scriptTopRef = useRef(0);
+  const pendingAudioDeletes = useRef(new Set<string>());
+
+  function deleteAudio(file?: string) {
+    if (file) pendingAudioDeletes.current.add(file);
+  }
+
+  async function onSave(next: Project) {
+    const cleanup = [...pendingAudioDeletes.current];
+    const saved = await saveProjectDraft(next);
+    if (saved === false) return;
+    const referenced = new Set(next.chapters.flatMap((c) => c.lines.flatMap((l) => [l.audio, ...(l.audioHistory || [])])));
+    for (const file of cleanup) {
+      if (!referenced.has(file)) deleteAudioFile(file);
+      pendingAudioDeletes.current.delete(file);
+    }
+  }
+
+  useEffect(() => {
+    onBusyChange?.(genState === "generating" || annotating || task === "running");
+  }, [genState, annotating, task, onBusyChange]);
+
+  useEffect(() => {
+    if (!saveBlocked) return;
+    pendingAudioDeletes.current.clear();
+    genStopRef.current = true;
+    cancelAi();
+    audioRef.current?.pause();
+    continuousRef.current = null;
+  }, [saveBlocked]);
 
   useEffect(() => {
     projectRef.current = project;

@@ -154,6 +154,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 主题存在 `<html data-theme="light|dark">`，选择写 `localStorage` 的 `shengkan:theme`；默认 `light`，`index.html` 在 React 前先读，避免闪白。
 - 颜色只用 `styles.css` 里的语义 token：`--accent` 是操作，`--brass` 是时间，`--danger` 是错误/删除；不要在组件里写死颜色。
 - 每章台词保存时整本 `project.json` 重写，暂时没有增量保存。
+- Electron/MCP 项目保存统一走 `app/electron/project-store.cjs`，在排他锁内校验内容版本；`__storageVersion` 仅用于传输，不写入 JSON。冲突不覆盖，音频清理必须在项目保存成功后执行；不要自动抢占遗留锁。
 - 删除项目一律走 `projects.cjs` 的 `trashProject`，不要直接 `fs.rm` 项目目录。彻底删除只在回收站里做。
 - 页面不要引入重型状态库，现有 `useState` + props 足够。
 - 不引入原生模块依赖；Electron 打包要跨机器可用，纯 JS 优先。
@@ -226,7 +227,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 批量生成用 `runPool`：全云 3 并发、混合 2 并发、全本地 1 并发；取消时已发出的请求返回后停止。
 - 成片导出历史存 `localStorage`（`shengkan:exports:<projectId>`），因为 Master 切页会卸载；文件名用「书名-章节名」。
 - `voiceHistory` 记录角色用过的音色，绑定/解绑/删除音色时写入，最多 12 条，可单条移除。
-- 默认界面缩放 1.25，窗口 1600×1000；顶栏和 master head 必须允许换行。
+- 默认界面缩放 0.9，窗口 1600×1000；顶栏和 master head 必须允许换行。
 - 音色库分组：本地音色按 `category`，云音色按 `model`（小米预置 / 设计音色）。
 - EPUB 解析跳过 `img / figure / figcaption`，避免插图说明混进正文。
 - 成片导出走 `engine/node-server.mjs` 的 `/v1/merge` / `/v1/export` / `/v1/zip`，WAV 读写、重采样、响度归一和分轨 ZIP 在 `engine/wav.mjs`，不要引入原生音频依赖。

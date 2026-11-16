@@ -30,7 +30,22 @@ export default function App() {
   const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropped, setDropped] = useState<File | null>(null);
+  const [saveError, setSaveError] = useState("");
+  const [studioBusy, setStudioBusy] = useState(false);
+  const [reloadConfirm, setReloadConfirm] = useState(false);
+  const draftRef = useRef<Project | null>(null);
+  const saveErrorRef = useRef("");
   const dragDepth = useRef(0);
+
+  useEffect(() => {
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      if (!saveErrorRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, []);
 
   function hasFiles(event: React.DragEvent) {
     return Array.from(event.dataTransfer?.types || []).includes("Files");
@@ -50,6 +65,7 @@ export default function App() {
   }, []);
 
   async function openProject(id: string, action?: ProjectAction) {
+    if (saveErrorRef.current) return;
     try {
       const p = await loadProject(id);
       setProject(p);
@@ -74,16 +90,51 @@ export default function App() {
   }
 
   async function persist(next: Project) {
+    draftRef.current = next;
     setProject(next);
+    if (saveErrorRef.current) return false;
     try {
       const s = await saveProject(next);
       setProjects((prev) => {
         const rest = prev.filter((x) => x.id !== s.id);
         return [s, ...rest];
       });
+      return true;
     } catch (err) {
       console.error("保存失败", err);
-      window.alert(`保存失败：${(err as Error).message}`);
+      const message = (err as Error).message || "项目保存失败";
+      saveErrorRef.current = message;
+      setSaveError(message);
+      return false;
+    }
+  }
+
+  function downloadDraft() {
+    const draft = draftRef.current ?? project;
+    if (!draft) return;
+    const { __storageVersion: _version, ...content } = draft;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${draft.id}-draft-${Date.now()}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function reloadSavedProject() {
+    if (!project || studioBusy) return;
+    try {
+      const loaded = await loadProject(project.id);
+      draftRef.current = loaded;
+      setProject(loaded);
+      saveErrorRef.current = "";
+      setSaveError("");
+      setReloadConfirm(false);
+      setProjects(await listProjects());
+    } catch (error) {
+      const message = `重新载入失败：${(error as Error).message}`;
+      saveErrorRef.current = message;
+      setSaveError(message);
     }
   }
 
@@ -167,7 +218,23 @@ export default function App() {
   return (
     <>
       <TopBar page={page} onNavigate={setPage} />
+      {saveError && (
+        <div className="save-conflict" role="alert">
+          <div>
+            <b>保存已暂停，当前内容尚未写入磁盘</b>
+            <p>{saveError}</p>
+            <span>当前草稿仍保留在本窗口。请先下载副本，再重新载入磁盘上的最新项目；关闭窗口会丢失未保存内容。</span>
+          </div>
+          <div className="save-conflict-actions">
+            <button className="btn" onClick={downloadDraft}>下载草稿副本</button>
+            <button className="btn" disabled={studioBusy} onClick={() => setReloadConfirm(true)}>
+              {studioBusy ? "等待任务收尾…" : "重新载入最新项目"}
+            </button>
+          </div>
+        </div>
+      )}
       <main
+        inert={!!saveError}
         onDragEnter={(e) => {
           if (page === "library" || !hasFiles(e)) return;
           e.preventDefault();
@@ -213,11 +280,25 @@ export default function App() {
           action={pendingAction}
           onActionDone={() => setPendingAction(null)}
           active={page === "studio"}
+          saveBlocked={!!saveError}
+          onBusyChange={setStudioBusy}
         />
         {page === "cast" && <Cast project={project} onSave={persist} />}
         {page === "master" && <Master project={project} />}
         {page === "settings" && <Settings />}
       </main>
+      {reloadConfirm && (
+        <div className="modal-mask">
+          <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="reload-project-title">
+            <div className="modal-head"><div className="modal-title" id="reload-project-title">重新载入最新项目？</div></div>
+            <div className="modal-body">当前未保存内容将被磁盘版本替换。请确认已下载草稿副本；不会覆盖磁盘上的外部修改。</div>
+            <div className="modal-foot">
+              <button className="btn" onClick={() => setReloadConfirm(false)}>保留当前草稿</button>
+              <button className="btn primary" onClick={reloadSavedProject} disabled={studioBusy}>已保留副本，重新载入</button>
+            </div>
+          </div>
+        </div>
+      )}
       {dragging && (
         <div className="drop-overlay">
           <div className="drop-overlay-inner">

@@ -119,11 +119,15 @@ export default function Library({
   async function renameProject(p: ProjectSummary) {
     const value = await askText("项目名", p.title);
     if (!value?.trim() || value.trim() === p.title) return;
-    const full = await loadProject(p.id);
-    await saveProject({ ...full, title: value.trim() });
-    setMenu(null);
-    await onRefresh();
-    log("project", "重命名项目", { id: p.id, title: value.trim() });
+    try {
+      const full = await loadProject(p.id);
+      await saveProject({ ...full, title: value.trim() });
+      setMenu(null);
+      await onRefresh();
+      log("project", "重命名项目", { id: p.id, title: value.trim() });
+    } catch (error) {
+      window.alert(`重命名未保存：${(error as Error).message}`);
+    }
   }
 
   async function removeProject(p: ProjectSummary) {

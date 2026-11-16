@@ -45,6 +45,7 @@ export interface ProjectChapter {
 }
 
 export interface Project {
+  __storageVersion?: string;
   id: string;
   title: string;
   createdAt: string;
@@ -55,6 +56,7 @@ export interface Project {
 }
 
 export interface ProjectSummary {
+  __storageVersion?: string;
   id: string;
   title: string;
   chapters: number;
@@ -292,8 +294,26 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return [toSummary(fallbackProject())];
 }
 
+interface SaveSession {
+  version?: string;
+  accepted: Set<string | undefined>;
+  tail: Promise<unknown>;
+  error?: Error;
+}
+
+const saveSessions = new Map<string, SaveSession>();
+
+function beginSaveSession(project: Project) {
+  saveSessions.set(project.id, {
+    version: project.__storageVersion,
+    accepted: new Set([project.__storageVersion]),
+    tail: Promise.resolve(),
+  });
+  return project;
+}
+
 export async function loadProject(id: string): Promise<Project> {
-  if (ipcAvailable()) return normalizeProject(await window.shengkan!.projects.load(id));
+  if (ipcAvailable()) return beginSaveSession(normalizeProject(await window.shengkan!.projects.load(id)));
   const raw = localStorage.getItem("shengkan:project");
   if (raw) {
     try {
@@ -307,14 +327,35 @@ export async function loadProject(id: string): Promise<Project> {
 }
 
 export async function saveProject(project: Project): Promise<ProjectSummary> {
-  if (ipcAvailable()) return window.shengkan!.projects.save(project);
+  if (ipcAvailable()) {
+    if (!saveSessions.has(project.id)) beginSaveSession(project);
+    const session = saveSessions.get(project.id)!;
+    const snapshot = JSON.parse(JSON.stringify(project)) as Project;
+    const task = session.tail.then(async () => {
+      if (session.error) throw session.error;
+      if (saveSessions.get(project.id) !== session || !session.accepted.has(snapshot.__storageVersion)) {
+        throw new Error("PROJECT_CONFLICT 项目会话已变化，请保留草稿并重新载入");
+      }
+      try {
+        const result = await window.shengkan!.projects.save({ ...snapshot, __storageVersion: session.version });
+        session.version = result.__storageVersion ?? session.version;
+        session.accepted.add(session.version);
+        return result;
+      } catch (error) {
+        session.error = error instanceof Error ? error : new Error(String(error));
+        throw session.error;
+      }
+    });
+    session.tail = task.catch(() => {});
+    return task;
+  }
   project.updatedAt = new Date().toISOString();
   localStorage.setItem("shengkan:project", JSON.stringify(project));
   return toSummary(project);
 }
 
 export async function createProject(title: string): Promise<Project> {
-  if (ipcAvailable()) return window.shengkan!.projects.create(title);
+  if (ipcAvailable()) return beginSaveSession(await window.shengkan!.projects.create(title));
   const project: Project = {
     ...fallbackProject(),
     id: `p-${Date.now().toString(36)}`,

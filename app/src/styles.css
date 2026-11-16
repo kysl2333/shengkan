@@ -4697,6 +4697,42 @@ input.slider[type="range"]::-webkit-slider-thumb {
   padding: 4px 9px 6px;
 }
 
+.save-conflict {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--ink);
+}
+
+.save-conflict > div:first-child {
+  flex: 1;
+  min-width: 240px;
+}
+
+.save-conflict b,
+.save-conflict p {
+  color: var(--danger);
+}
+
+.save-conflict p {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.save-conflict span {
+  font-size: 12px;
+}
+
+.save-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .toast {
   position: fixed;
   top: 72px;
