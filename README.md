@@ -1,10 +1,20 @@
 # 声栞 · Shiori Voices
 
-本地 AI 配音工作台。把小说、剧本或同人文本拆成多角色台词，为每个角色匹配音色和情绪，逐句生成音频，最后合成整章有声书。
+本地 AI 台词配音工作台。把小说、剧本或同人文本拆成多角色台词，为每个角色匹配音色和情绪，逐句生成音频，最后合成整章有声书。
 
 声栞把「拆章、拆台词、认角色、配音、导出」放在一个桌面应用里。原文和项目保存在本机，只有你主动调用 AI 时，相关文本或音频才会发送给你配置的服务商。
 
-[下载最新安装包](../../releases/latest) · [从源码运行](docs/DEVELOPMENT.md) · [MCP 接入](mcp/README.md)
+[下载最新安装包](../../releases/latest) · [版本里程碑](RELEASES.md) · [从源码运行](docs/DEVELOPMENT.md) · [MCP 接入](mcp/README.md)
+
+## 界面
+
+| 项目 | 工作台 |
+|---|---|
+| ![项目库](docs/screenshots/01-library.png) | ![工作台](docs/screenshots/02-studio.png) |
+| **角色与音色** | **成片** |
+| ![角色与音色](docs/screenshots/03-cast.png) | ![成片](docs/screenshots/04-master.png) |
+
+截图使用示例项目「雨夜书店」，不含真实用户数据。
 
 ## 功能
 
@@ -122,7 +132,7 @@ start.bat
 
 `start.bat` 会在依赖缺失时安装依赖，在需要时构建前端，然后启动 Electron。
 
-开发模式、构建安装包、目录结构和接口说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+开发模式、构建安装包、目录结构和接口说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。仓库命名、可见性、许可证和 Release 流程见 [docs/GITHUB.md](docs/GITHUB.md)。
 
 ## 常见问题
 
@@ -152,6 +162,18 @@ EPUB 优先使用书内目录；TXT 可以先用规则分章，再对单章使�
 - 前端改动至少跑 `cd app && npm.cmd run build`
 - 涉及工作台状态或生成流程时，再跑 `cd app && npm.cmd run check:studio`
 - 不要提交 `projects/`、`voices/`、`engine/outputs/`、`mcp/data/`、`node_modules/`、`dist/`、`release/`
+
+## 许可证
+
+本项目使用 [GNU General Public License v3.0](LICENSE)（GPL-3.0）。
+
+你可以使用、修改和分发本项目，但需要：
+
+- 保留原项目的版权声明和许可证
+- 修改后的作品继续使用 GPL-3.0 发布
+- 分发时提供对应的源代码
+
+Copyright (C) 2026 声栞项目作者
 
 ## 免责声明
 

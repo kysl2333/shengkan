@@ -10,12 +10,16 @@ const USER_DATA = app.getPath("userData");
 const ENGINE_DIR = PACKAGED
   ? path.join(process.resourcesPath, "engine")
   : path.join(REPO, "engine");
-const PROJECTS = PACKAGED
-  ? path.join(DOCUMENTS, "shengkan-projects")
-  : path.join(REPO, "projects");
-const VOICES = PACKAGED
-  ? path.join(DOCUMENTS, "shengkan-voices")
-  : path.join(REPO, "voices");
+const PROJECTS = process.env.SHENGKAN_PROJECTS
+  ? path.resolve(process.env.SHENGKAN_PROJECTS)
+  : PACKAGED
+    ? path.join(DOCUMENTS, "shengkan-projects")
+    : path.join(REPO, "projects");
+const VOICES = process.env.SHENGKAN_VOICES
+  ? path.resolve(process.env.SHENGKAN_VOICES)
+  : PACKAGED
+    ? path.join(DOCUMENTS, "shengkan-voices")
+    : path.join(REPO, "voices");
 const OUTPUTS = PACKAGED
   ? path.join(USER_DATA, "outputs")
   : path.join(ENGINE_DIR, "outputs");

@@ -1,8 +1,8 @@
 {
   "name": "shengkan",
   "private": true,
-  "version": "0.1.0",
-  "description": "声栞：本地 AI 配音工作台",
+  "version": "1.0.1",
+  "description": "声栞：本地 AI 台词配音工作台",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -41,6 +41,10 @@
     ],
     "extraResources": [
       {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
         "from": "../engine",
         "to": "engine",
         "filter": [
@@ -56,6 +60,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",

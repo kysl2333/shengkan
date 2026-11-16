@@ -1,5 +1,23 @@
 # 开发记录
 
+## 2026-11-17 · v1.0.1 品牌和截图
+
+### 完成
+
+- 窗口标题改为 `声栞 · Shiori Voices`；顶部品牌 `配音工作台` 改为 `台词配音工作台`
+- 用最新 `logo/shiori-logo.png` 重新生成 `app/build/icon.ico`（16–256 共 8 档），重新打包
+- 版本号改为 `1.0.1`，安装包名 `shengkan-1.0.1-setup.exe`
+- 新增用户向 `RELEASES.md`，README 增加项目、工作台、角色与音色、成片四张截图
+- 安装包通过 `extraResources` 附带 `LICENSE`
+
+### 验证
+
+- `npm.cmd run build` 和 `npm.cmd run dist` 通过
+- 打包版窗口标题为 `声栞 · Shiori Voices`，顶部品牌为 `声栞 台词配音工作台`
+- 从 EXE 和安装包提取的图标都是新版「卷边纸页」
+- 用临时示例项目「雨夜书店」和临时 7860 mock Gradio 截取四个页面；截图保存在 `docs/screenshots/`
+- 截图环境使用临时 profile、项目、音色和输出目录，不涉及真实项目和音色
+
 ## 2026-11-17 · 发行版提示词、设置页操作和 GitHub 准备
 
 ### 完成
@@ -9,21 +27,25 @@
 - 把旧 README 复制为 `docs/DEVELOPMENT.md`，根 README 改成用户安装和使用说明
 - `.scratch/` 从 Git 索引移除，文件仍保留在本机；`.gitignore` 增加密钥和证书文件
 - 安装版 `engine.cjs` 使用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1` 启动 Node 代理，避免要求用户安装 Node
+- 品牌图标定稿为「折角纸页」：`logo/shiori-logo.png` 为唯一源文件，`logo/shiori-icon/` 输出 16–1024 十档尺寸，全部由源文件缩放
 
 ### 验证
 
 - `npm.cmd run build` 通过
-- `npm.cmd run dist` 通过，生成 `release/shengkan-0.1.0-setup.exe`（约 122 MB）和 `release/win-unpacked/`；当前只是测试构建，等 logo 确定后再重新打包
+- `npm.cmd run dist` 通过，生成 `release/shengkan-0.1.0-setup.exe`（约 122 MB）和 `release/win-unpacked/`；已带新图标和 GPL-3.0 许可证
 - 解包 `app.asar` 确认包含 `defaultPrompts`、两段内置提示词、`settings-save-row` 和 `ELECTRON_RUN_AS_NODE`
 - 用独立用户目录启动打包版，设置页两个提示词输入框分别有 734 和 1193 个字符；项目库显示 0 个项目、0 句台词
 - 截图检查保存按钮位于表单组末尾，父元素为 `setting-group`，不再是独立的 `settings-actions`
-- 隐私扫描：63 个跟踪文件无真实 Key、无本机用户路径；唯一的 Key 形态命中是设计稿里的占位输入；打包产物未包含 `ai.json`、项目、音色、日志或参考音频
+- `app/build/icon.ico` 由 `icon-16` 到 `icon-256` 合成 8 档尺寸，`build.win.icon` 已接入；从 EXE 和安装包提取的图标都是新 logo
+- `LICENSE` 已作为 `extraResources` 打进安装包，`release/win-unpacked/resources/LICENSE` 为 GPL-3.0 全文
+- `release/start-isolated.cmd` 已用临时 profile、项目、音色和输出目录启动；项目库为 0，引擎代理在 8290 启动并使用隔离音色目录
+- 隐私扫描：64 个跟踪文件无真实 Key、无本机用户路径；打包产物未包含 `ai.json`、项目、音色、日志或参考音频
 
 ### 待办
 
 - 安装包仍未做代码签名，Windows SmartScreen 会提示未知发布者
-- 应用图标仍是 Electron 默认图标，需要单独的 `.ico` 和 `build.icon` 配置
-- GitHub 远端尚未配置，等待仓库地址和许可证选择
+- 应用图标已接入打包；后续如果调整 logo，需要重新生成 `app/build/icon.ico`
+- GitHub 远端尚未配置；许可证已定为 GPL-3.0，等待仓库名和可见性
 
 ## 2026-11-16 · 发行版准备：拼音路径、隐私清理和回收站
 

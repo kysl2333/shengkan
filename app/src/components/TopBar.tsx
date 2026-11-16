@@ -128,7 +128,7 @@ export default function TopBar({
       <div className="brand">
         <span className="brand-rule" aria-hidden="true" />
         <span className="brand-mark">声栞</span>
-        <span className="brand-sub">配音工作台</span>
+        <span className="brand-sub">台词配音工作台</span>
       </div>
 
       <nav className="nav" aria-label="主导航">
