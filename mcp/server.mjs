@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import projectStore from "../app/electron/project-store.cjs";
+import recoveryDrafts from "../app/electron/recovery-drafts.cjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(here, "data");
@@ -147,7 +148,13 @@ function writeProject(project) {
     Object.assign(project, saved.project);
     projectVersions.set(project, { file: source.file, version: saved.version });
   } catch (e) {
-    const error = new Error(`写入项目失败：${source.file}（${e.message}）`);
+    let recovery;
+    try {
+      recovery = `恢复草稿：${recoveryDrafts.preserve(PROJECTS, project)}`;
+    } catch (draftError) {
+      recovery = `恢复草稿失败：${draftError.message}`;
+    }
+    const error = new Error(`写入项目失败：${source.file}（${e.message}）\n${recovery}`);
     error.code = e.code;
     throw error;
   }
@@ -1233,10 +1240,16 @@ server.tool(
   async ({ project }) => {
     if (!allowed("full")) return deny("full");
     const p = readProject(project);
-    const dir = path.dirname(currentFile);
+    const file = projectVersions.get(p).file;
+    const dir = path.dirname(file);
     const trashName = `${path.basename(dir)}__${Date.now()}`;
     fs.mkdirSync(TRASH, { recursive: true });
-    fs.renameSync(dir, path.join(TRASH, trashName));
+    const target = path.join(TRASH, trashName);
+    projectStore.withFiles([file, path.join(target, "project.json")], () => {
+      if (!fs.existsSync(file)) throw new Error("项目已被移除，请重新读取项目。");
+      if (fs.existsSync(target)) throw new Error("回收站目标已存在，请重试。");
+      fs.renameSync(dir, target);
+    });
     currentFile = null;
     audit("trash_project", { project: p.id, title: p.title, trashName });
     return text({ ok: true, id: p.id, title: p.title, trashName });
@@ -1249,6 +1262,7 @@ server.tool(
   { trashName: z.string().describe("list_projects(includeTrash=true) 返回的 trashName") },
   async ({ trashName }) => {
     if (!allowed("full")) return deny("full");
+    if (path.basename(trashName).startsWith(".")) return { ...text("回收站项目名不合法"), isError: true };
     const src = path.join(TRASH, path.basename(trashName));
     const file = path.join(src, "project.json");
     if (!fs.existsSync(file)) return { ...text("回收站里没有这个项目"), isError: true };
@@ -1257,8 +1271,13 @@ server.tool(
     const base = path.basename(trashName).split("__")[0] || `restored-${Date.now()}`;
     let target = path.join(PROJECTS, base);
     if (fs.existsSync(target)) target = path.join(PROJECTS, `${base}-restored-${Date.now()}`);
-    fs.renameSync(src, target);
-    const project = readJson(path.join(target, "project.json"));
+    const project = projectStore.withFiles([file, path.join(target, "project.json")], () => {
+      if (!fs.existsSync(file)) throw new Error("回收站里没有这个项目");
+      if (fs.existsSync(target)) throw new Error("还原目标已存在，请重试。");
+      const restored = readJson(file);
+      fs.renameSync(src, target);
+      return restored;
+    });
     currentFile = path.join(target, "project.json");
     audit("restore_project", { project: project.id, title: project.title, dir: target });
     return text({ ok: true, id: project.id, title: project.title, file: currentFile });
