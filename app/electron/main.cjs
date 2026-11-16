@@ -116,7 +116,7 @@ function createWindow() {
     win.show();
   });
 
-  win.webContents.setZoomFactor(1.6);
+  win.webContents.setZoomFactor(1.25);
 
   const devUrl = process.env.SHENGKAN_DEV_URL;
   const indexFile = path.join(__dirname, "..", "dist", "index.html");
