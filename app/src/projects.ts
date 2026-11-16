@@ -173,6 +173,7 @@ declare global {
       ai: {
         get: () => Promise<import("./ai").AiConfig>;
         set: (cfg: import("./ai").AiConfig) => Promise<import("./ai").AiConfig>;
+        path: () => Promise<string>;
         test: () => Promise<{ ok: boolean; ms: number; model: string; provider?: string }>;
         listModels: (payload: {
           baseUrl: string;
@@ -205,6 +206,10 @@ declare global {
         list: () => Promise<import("./cloud").CloudVoice[]>;
         providers: () => Promise<import("./cloud").CloudProvider[]>;
         tts: (payload: import("./cloud").CloudTTSPayload) => Promise<{ file: string; url: string }>;
+        sample: (
+          id: string,
+          options?: { refresh?: boolean }
+        ) => Promise<import("./cloud").CloudSample>;
         designPreview: (payload: {
           prompt?: string;
           description?: string;

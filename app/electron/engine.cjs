@@ -81,6 +81,7 @@ async function ensureEngine() {
     };
     if (cfg.indexttsCodeDir) env.INDEXTTS_CODE_DIR = cfg.indexttsCodeDir;
     if (cfg.indexttsModelDir) env.INDEXTTS_MODEL_DIR = cfg.indexttsModelDir;
+    if (cfg.indexttsVersion) env.INDEXTTS_VERSION = cfg.indexttsVersion;
     if (cfg.voiceLib) env.VOICE_LIB = cfg.voiceLib;
     child = spawn(python, [PY_SERVER], {
       cwd: ENGINE_DIR,

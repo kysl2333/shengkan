@@ -22,3 +22,6 @@ mcp/data/
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# CodeGraph 本地索引
+.codegraph/

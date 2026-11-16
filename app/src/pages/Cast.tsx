@@ -3,7 +3,7 @@ import { getVoices, ENGINE, deleteVoice, updateVoice, type VoiceItem } from "../
 import {
   listCloudVoices,
   listCloudProviders,
-  cloudTTS,
+  cloudVoiceSample,
   designCloudPreview,
   saveCloudDesign,
   materializeCloudVoice,
@@ -61,7 +61,11 @@ export default function Cast({
   const [cloudProviders, setCloudProviders] = useState<CloudProvider[]>([]);
   const [designProvider, setDesignProvider] = useState("mimo");
   const [cloudLoading, setCloudLoading] = useState(false);
-  const [cloudPreview, setCloudPreview] = useState("");
+  const [cloudPlaying, setCloudPlaying] = useState("");
+  const [cloudPaused, setCloudPaused] = useState(false);
+  const [cloudPreviewLoading, setCloudPreviewLoading] = useState("");
+  const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
+  const cloudReqRef = useRef(0);
   const [designOpen, setDesignOpen] = useState(false);
   const [designPrompt, setDesignPrompt] = useState("");
   const [designDesc, setDesignDesc] = useState("");
@@ -87,6 +91,7 @@ export default function Cast({
       .catch((e) => setError((e as Error).message));
     return () => {
       audioRef.current?.pause();
+      cloudAudioRef.current?.pause();
     };
   }, []);
 
@@ -313,27 +318,61 @@ export default function Cast({
     setVoices((await getVoices()).voices);
   }
 
-  async function previewCloud(voice: CloudVoice) {
-    if (cloudPreview) return;
+  async function playCloudVoice(voice: CloudVoice, refresh = false) {
+    // 同一张卡片：正在播放就暂停，暂停中就继续。
+    if (!refresh && cloudPlaying === voice.id && cloudAudioRef.current) {
+      const audio = cloudAudioRef.current;
+      if (audio.paused) {
+        await audio.play().catch(() => {});
+        setCloudPaused(false);
+      } else {
+        audio.pause();
+        setCloudPaused(true);
+      }
+      return;
+    }
+
+    const req = ++cloudReqRef.current;
     audioRef.current?.pause();
+    setPlayingPath("");
     designAudioRef.current?.pause();
     setDesignPlaying(false);
-    setPlayingPath("");
-    setCloudPreview(voice.id);
+    cloudAudioRef.current?.pause();
+    setCloudPlaying(voice.id);
+    setCloudPaused(false);
+    setCloudPreviewLoading(voice.id);
+    setError("");
+
     try {
-      const r = await cloudTTS({
-        text: "你好，这是音色试听。",
-        model: voice.model,
-        voice: voice.voice,
-      });
+      const r = await cloudVoiceSample(voice.id, { refresh });
+      if (req !== cloudReqRef.current) return;
       const audio = new Audio(`${ENGINE}${r.url}`);
-      audioRef.current = audio;
-      audio.onended = () => setCloudPreview("");
-      audio.onerror = () => setCloudPreview("");
+      cloudAudioRef.current = audio;
+      audio.onended = () => {
+        setCloudPlaying("");
+        setCloudPaused(false);
+      };
+      audio.onplay = () => setCloudPaused(false);
+      audio.onpause = () => {
+        if (cloudAudioRef.current === audio) setCloudPaused(true);
+      };
+      setCloudPreviewLoading("");
       await audio.play();
+      if (refresh) {
+        setNotice(`已重新生成「${voice.name}」的试听`);
+        window.setTimeout(() => setNotice(""), 5000);
+      }
+      log("cloud", refresh ? "重新生成云音色试听" : "试听云音色", {
+        id: voice.id,
+        name: voice.name,
+        cached: r.cached,
+      });
     } catch (e) {
+      if (req !== cloudReqRef.current) return;
       setError((e as Error).message);
-      setCloudPreview("");
+      setCloudPlaying("");
+      setCloudPaused(false);
+      setCloudPreviewLoading("");
     }
   }
 
@@ -495,7 +534,10 @@ export default function Cast({
   function toggleVoice(v: VoiceItem) {
     designAudioRef.current?.pause();
     setDesignPlaying(false);
-    setCloudPreview("");
+    cloudAudioRef.current?.pause();
+    setCloudPlaying("");
+    setCloudPaused(false);
+    setCloudPreviewLoading("");
     const url = `${ENGINE}/v1/voice-audio?path=${encodeURIComponent(v.path)}`;
     if (playingPath === v.path && audioRef.current) {
       if (audioRef.current.paused) {
@@ -814,6 +856,8 @@ export default function Cast({
               : cloudFiltered.map((v, index) => {
                     const bound =
                       selected?.cloudModel === v.model && selected?.cloudVoice === v.voice;
+                    const playing = cloudPlaying === v.id && !cloudPaused;
+                    const previewLoading = cloudPreviewLoading === v.id;
                     return (
                       <Fragment key={v.id}>
                         {(index === 0 ||
@@ -837,12 +881,20 @@ export default function Cast({
                         <VoiceWave />
                         <div className="voice-foot">
                           <button
-                            className={`voice-play ${cloudPreview === v.id ? "playing" : ""}`}
-                            aria-label="试听云音色"
-                            onClick={() => previewCloud(v)}
-                            disabled={!!cloudPreview}
+                            className={`voice-play ${playing ? "playing" : ""}`}
+                            aria-label={playing ? "暂停试听" : "试听云音色"}
+                            onClick={() => playCloudVoice(v)}
+                            disabled={previewLoading}
                           >
-                            {cloudPreview === v.id ? "…" : "▶"}
+                            {previewLoading ? "…" : playing ? "❚❚" : "▶"}
+                          </button>
+                          <button
+                            className="voice-edit"
+                            title="根据这个音色的描述重新生成一版试听"
+                            onClick={() => playCloudVoice(v, true)}
+                            disabled={previewLoading}
+                          >
+                            ⟳ 重新生成
                           </button>
                           <button
                             className={`voice-use ${bound ? "on" : ""}`}
@@ -854,7 +906,7 @@ export default function Cast({
                           <button
                             className={`voice-use ${v.localPath ? "on" : ""}`}
                             onClick={() => addToLocalLibrary(v)}
-                            disabled={!!cloudPreview || !!v.localPath}
+                            disabled={previewLoading || !!v.localPath}
                           >
                             {v.localPath ? "已在本地库" : "加入本地音色库"}
                           </button>

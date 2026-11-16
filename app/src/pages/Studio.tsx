@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getVoices, splitText, synthesize, audioUrl, deleteAudio, type Segment } from "../api";
+import { getHealth, getVoices, splitText, synthesize, audioUrl, deleteAudio, type Segment } from "../api";
 import { annotateLines, cancelAi, onAiProgress, extractCasts, emptyAiUsage, addAiUsage } from "../ai";
 import { cloudTTS } from "../cloud";
 import { isRealCharacter, refineSpeakers } from "../import";
@@ -40,10 +40,10 @@ function lineStatusKey(chapterKey: string, lineId: number) {
   return `${chapterKey}:${lineId}`;
 }
 
-function castEngineInfo(cast?: ProjectCast) {
+function castEngineInfo(cast?: ProjectCast, version = "2.5") {
   const model = cast?.cloudModel || "";
   if (!cast?.cloudVoice || !model) {
-    return { engine: "IndexTTS 2.5", detail: "本地或远端 Gradio", cloud: false, model: "" };
+    return { engine: `IndexTTS ${version}`, detail: "本地或远端 Gradio", cloud: false, model: "" };
   }
   const engine = model.startsWith("mimo")
     ? "小米云 TTS"
@@ -146,11 +146,13 @@ export default function Studio({
   onSave,
   action,
   onActionDone,
+  active = true,
 }: {
   project: Project | null;
   onSave: (p: Project) => void;
   action?: ProjectAction | null;
   onActionDone?: () => void;
+  active?: boolean;
 }) {
   const [chapterId, setChapterId] = useState(project?.chapters[0]?.id ?? "");
   const chapter = project?.chapters.find((c) => c.id === chapterId) ?? project?.chapters[0];
@@ -185,12 +187,14 @@ export default function Studio({
   const thinkingBoxRef = useRef<HTMLDivElement>(null);
   const [systemVoices, setSystemVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [systemVoice, setSystemVoice] = useState("");
+  const [engineVersion, setEngineVersion] = useState("2.5");
   const [lineMenu, setLineMenu] = useState<{ x: number; y: number; line: ProjectLine } | null>(null);
   const [audioSrc, setAudioSrc] = useState("");
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [auditionMode, setAuditionMode] = useState<"single" | "continuous">("single");
+  const [followPlayback, setFollowPlayback] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioRateRef = useRef(1);
   const continuousRef = useRef<{ queue: ProjectLine[]; index: number } | null>(null);
@@ -207,6 +211,8 @@ export default function Studio({
   const ranActionRef = useRef("");
   const projectRef = useRef(project);
   const chapterIdRef = useRef(chapterId);
+  const scriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const scriptTopRef = useRef(0);
 
   useEffect(() => {
     projectRef.current = project;
@@ -224,6 +230,13 @@ export default function Studio({
       setScript(first.lines);
       setEditingSource(false);
       setSourceDraft("");
+    } else if (!project) {
+      chapterIdRef.current = "";
+      setChapterId("");
+      setScript([]);
+      setCurrent(1);
+      setEditingSource(false);
+      setSourceDraft("");
     }
   }, [project?.id]);
 
@@ -235,6 +248,19 @@ export default function Studio({
     setLineMenu(null);
     setFlashParagraph(0);
   }, [chapterId]);
+
+  // 切到其他页面时 Studio 只隐藏不卸载，回来时恢复到原来的稿纸滚动位置。
+  useLayoutEffect(() => {
+    if (!active || view !== "lines") return;
+    const el = scriptScrollRef.current;
+    if (el && scriptTopRef.current > 0) el.scrollTop = scriptTopRef.current;
+  }, [active, view]);
+
+  useEffect(() => {
+    if (active) return;
+    audioRef.current?.pause();
+    setAudioPlaying(false);
+  }, [active]);
 
   useEffect(() => {
     const c = project?.chapters.find((x) => x.id === chapterId);
@@ -250,11 +276,13 @@ export default function Studio({
     if (!flashLine) return;
     const el = document.getElementById(`line-${flashLine}`);
     if (!el) return;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    if (followPlayback) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    }
     const timer = window.setTimeout(() => setFlashLine(0), 1800);
     return () => window.clearTimeout(timer);
-  }, [flashLine]);
+  }, [flashLine, followPlayback]);
 
   useEffect(() => {
     return () => {
@@ -290,6 +318,12 @@ export default function Studio({
     load();
     window.speechSynthesis.addEventListener("voiceschanged", load);
     return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  useEffect(() => {
+    getHealth()
+      .then((h) => setEngineVersion(h.version || "2.5"))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -332,7 +366,7 @@ export default function Studio({
 
   const selected = script.find((l) => l.id === current) ?? script[0];
   const selectedCast = castList.find((c) => c.name === selected?.speaker);
-  const selectedEngine = castEngineInfo(selectedCast);
+  const selectedEngine = castEngineInfo(selectedCast, engineVersion);
   const genEngine = genTarget ?? {
     id: 0,
     speaker: "",
@@ -1570,7 +1604,7 @@ export default function Studio({
 
   function markGenTarget(line: ProjectLine) {
     const cast = castList.find((c) => c.name === line.speaker);
-    const info = castEngineInfo(cast);
+    const info = castEngineInfo(cast, engineVersion);
     setGenTarget({
       id: line.id,
       speaker: line.speaker,
@@ -1865,7 +1899,7 @@ export default function Studio({
   }
 
   return (
-    <section className="page active" id="page-studio">
+    <section className={`page ${active ? "active" : ""}`} id="page-studio">
       <div className="studio-head">
         <span className="crumb">
           <b>{project?.title ?? "未命名项目"}</b>
@@ -2079,7 +2113,13 @@ export default function Studio({
             </div>
           )}
 
-          <div className={`script ${view === "lines" ? "" : "hidden"}`}>
+          <div
+            className={`script ${view === "lines" ? "" : "hidden"}`}
+            ref={scriptScrollRef}
+            onScroll={(e) => {
+              if (active) scriptTopRef.current = e.currentTarget.scrollTop;
+            }}
+          >
             <div className="inner">
               <div className="add-line add-line-top">
                 <button onClick={prependLine}>＋ 在最前面插入台词</button>
@@ -2363,6 +2403,31 @@ export default function Studio({
                 <span className="vu"><i /><i /><i /><i /><i /></span>
                 {script.filter((l) => l.status === "done" && l.audio).length} / {script.length}
               </span>
+              {auditionMode === "continuous" && (
+                <button
+                  className={`player-follow ${followPlayback ? "on" : ""}`}
+                  onClick={() => setFollowPlayback((v) => !v)}
+                  title={
+                    followPlayback
+                      ? "连续试听时自动跟随当前句滚动；点击改为自由滑动台词稿"
+                      : "自由滑动台词稿；点击恢复自动跟随当前句"
+                  }
+                  aria-label={followPlayback ? "关闭自动跟随" : "开启自动跟随"}
+                  aria-pressed={followPlayback}
+                >
+                  {followPlayback ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                      <circle cx="12" cy="12" r="3.2" />
+                      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 7l4-4 4 4M8 17l4 4 4-4" />
+                      <path d="M12 3v18" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <select
                 className="select speed-select"
                 defaultValue={audioRateRef.current}

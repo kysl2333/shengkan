@@ -1,4 +1,4 @@
-"""声栞本地引擎：IndexTTS 2.5 的 HTTP 封装。
+"""声栞本地引擎：IndexTTS 2.0 / 2.5 的 HTTP 封装。
 
 用 IndexTTS 自带的 venv 启动，不额外装依赖：
     D:\\APP\\IndexTTS-2.0\\.venv\\Scripts\\python.exe engine\\server.py
@@ -6,6 +6,7 @@
 环境变量：
     INDEXTTS_CODE_DIR   代码目录，默认 D:\\APP\\IndexTTS-2.0
     INDEXTTS_MODEL_DIR  权重目录，默认 S:\\AI\\IndexTTS-2.5
+    INDEXTTS_VERSION    2.5 或 2.0，默认 2.5
     VOICE_LIB           音色参考音频目录
     ENGINE_PORT         端口，默认 8290
 """
@@ -27,6 +28,9 @@ from pydantic import BaseModel
 
 CODE_DIR = Path(os.environ.get("INDEXTTS_CODE_DIR", r"D:\APP\IndexTTS-2.0"))
 MODEL_DIR = Path(os.environ.get("INDEXTTS_MODEL_DIR", r"S:\AI\IndexTTS-2.5"))
+INDEXTTS_VERSION = os.environ.get("INDEXTTS_VERSION", "2.5").strip()
+if INDEXTTS_VERSION not in {"2.0", "2.5"}:
+    INDEXTTS_VERSION = "2.5"
 VOICE_LIB = Path(
     os.environ.get("VOICE_LIB")
     or (Path(__file__).resolve().parent.parent / "voices")
@@ -79,13 +83,22 @@ def load_tts():
         sys.path.insert(0, str(CODE_DIR))
         os.chdir(str(CODE_DIR))
 
-        from indextts.infer_v2_5 import IndexTTS2
+        if INDEXTTS_VERSION == "2.0":
+            from indextts.infer_v2 import IndexTTS2
 
-        _tts = IndexTTS2(
-            cfg_path=str(MODEL_DIR / "config.yaml"),
-            model_dir=str(MODEL_DIR),
-            use_bf16=True,
-        )
+            _tts = IndexTTS2(
+                cfg_path=str(MODEL_DIR / "config.yaml"),
+                model_dir=str(MODEL_DIR),
+                use_fp16=True,
+            )
+        else:
+            from indextts.infer_v2_5 import IndexTTS2
+
+            _tts = IndexTTS2(
+                cfg_path=str(MODEL_DIR / "config.yaml"),
+                model_dir=str(MODEL_DIR),
+                use_bf16=True,
+            )
         return _tts
 
 
@@ -93,7 +106,8 @@ def load_tts():
 def health():
     return {
         "ok": True,
-        "engine": "indextts-2.5",
+        "engine": f"indextts-{INDEXTTS_VERSION}",
+        "version": INDEXTTS_VERSION,
         "code_dir": str(CODE_DIR),
         "model_dir": str(MODEL_DIR),
         "model_loaded": _tts is not None,
@@ -106,6 +120,9 @@ def list_voices(q: Optional[str] = None):
     items = []
     if VOICE_LIB.is_dir():
         for p in VOICE_LIB.rglob("*.wav"):
+            relative = p.relative_to(VOICE_LIB)
+            if any(part.startswith(".") for part in relative.parts):
+                continue
             name = p.stem
             if q and q.lower() not in name.lower():
                 continue
@@ -123,7 +140,8 @@ def list_voices(q: Optional[str] = None):
 
 @app.get("/v1/voice-audio")
 def voice_audio(path: str):
-    p = Path(path).resolve()
+    raw = Path(path)
+    p = (raw if raw.is_absolute() else VOICE_LIB / raw).resolve()
     try:
         p.relative_to(VOICE_LIB.resolve())
     except ValueError:
@@ -160,10 +178,11 @@ def synthesize(req: TTSRequest):
     kwargs = {
         "spk_audio_prompt": req.voice,
         "text": text,
-        "lang": req.lang,
         "output_path": str(out),
         "verbose": True,
     }
+    if INDEXTTS_VERSION == "2.5":
+        kwargs["lang"] = req.lang
     if req.emo_vector:
         kwargs["emo_vector"] = req.emo_vector
         kwargs["emo_alpha"] = req.emo_alpha
@@ -172,7 +191,7 @@ def synthesize(req: TTSRequest):
         kwargs["use_emo_text"] = True
         kwargs["emo_text"] = req.emo_text
     speed = max(0.5, min(2.0, float(req.speed or 1.0)))
-    if abs(speed - 1.0) > 0.01:
+    if INDEXTTS_VERSION == "2.5" and abs(speed - 1.0) > 0.01:
         kwargs["duration_factor"] = 1.0 / speed
 
     try:

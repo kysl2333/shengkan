@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("shengkan", {
   ai: {
     get: () => ipcRenderer.invoke("ai:config:get"),
     set: (cfg) => ipcRenderer.invoke("ai:config:set", cfg),
+    path: () => ipcRenderer.invoke("ai:config:path"),
     test: () => ipcRenderer.invoke("ai:test"),
     defaults: () => ipcRenderer.invoke("ai:default-prompts"),
     detectChapters: (text, toc, workTitle) => ipcRenderer.invoke("ai:detect-chapters", text, toc, workTitle),
@@ -48,6 +49,7 @@ contextBridge.exposeInMainWorld("shengkan", {
     list: () => ipcRenderer.invoke("cloud:list"),
     providers: () => ipcRenderer.invoke("cloud:providers"),
     tts: (payload) => ipcRenderer.invoke("cloud:tts", payload),
+    sample: (id, options) => ipcRenderer.invoke("cloud:sample", id, options),
     designPreview: (payload) => ipcRenderer.invoke("cloud:design-preview", payload),
     saveDesign: (payload) => ipcRenderer.invoke("cloud:save-design", payload),
     materialize: (id) => ipcRenderer.invoke("cloud:materialize", id),

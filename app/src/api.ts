@@ -11,6 +11,7 @@ export const ENGINE = getEngine();
 export interface Health {
   ok: boolean;
   engine: string;
+  version?: string;
   code_dir: string;
   model_dir: string;
   model_loaded: boolean;

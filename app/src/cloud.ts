@@ -26,6 +26,12 @@ export interface CloudProvider {
   enabled: boolean;
 }
 
+export interface CloudSample extends CloudVoice {
+  file: string;
+  url: string;
+  cached: boolean;
+}
+
 export interface CloudDesignPreview {
   tempId: string;
   name: string;
@@ -62,6 +68,15 @@ export async function materializeCloudVoice(id: string): Promise<CloudVoice> {
   const b = bridge();
   if (!b) throw new Error("云音色只在桌面版可用");
   return b.materialize(id);
+}
+
+export async function cloudVoiceSample(
+  id: string,
+  options?: { refresh?: boolean }
+): Promise<CloudSample> {
+  const b = bridge();
+  if (!b) throw new Error("云音色只在桌面版可用");
+  return b.sample(id, options);
 }
 
 export async function removeCloudVoice(id: string): Promise<{ ok: boolean; moved: string }> {

@@ -6,6 +6,7 @@ export interface EngineConfig {
   python: string;
   indexttsCodeDir: string;
   indexttsModelDir: string;
+  indexttsVersion: "2.5" | "2.0";
 }
 
 const KEY = "shengkan:engine-config";
@@ -18,6 +19,7 @@ const DEFAULTS: EngineConfig = {
   python: "",
   indexttsCodeDir: "",
   indexttsModelDir: "",
+  indexttsVersion: "2.5",
 };
 
 export async function getEngineConfig(): Promise<EngineConfig> {

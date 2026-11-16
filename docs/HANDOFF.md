@@ -1,6 +1,6 @@
 # 声栞 · 交接档案
 
-最后更新：2026-11-11
+最后更新：2026-11-16
 
 长期约定看 `AGENTS.md`，本文件看当前状态，改动看 `CHANGELOG.md`。
 
@@ -16,12 +16,12 @@
 | AI token | 可用。分章、重拆、标注结束显示输入/输出/缓存/总计 |
 | 角色页 | 可用。管理项目全部角色，音色按左侧选中角色绑定/取消绑定；重复 id 加载时自动去重 |
 | 本章角色 | 可用。工作台右侧只显示本章角色，可添加/移除本章、不改项目角色 |
-| 工作台 | 可用。顶栏「AI分析」二级菜单；顶部推荐流程；「生成配音」 |
-| 语音引擎 | 可用。优先 TTS 地址 / Gradio API；本机 Python 收在高级项；状态区分在线和模型已加载 |
+| 工作台 | 可用。顶栏「AI分析」二级菜单；顶部推荐流程；「生成配音」；切页保留章节、选中句和滚动位置；连续试听可切换跟随/自由滚动 |
+| 语音引擎 | 可用。优先 TTS 地址 / Gradio API；本机 Python 支持 IndexTTS 2.0 / 2.5；状态区分在线和模型已加载 |
 | 音频版本 | 可用。生成失败保留旧音频；每句最多 2 个，可切换回退 |
 | 批量生成 | 可用。全云 3 并发、混合 2 并发、全本地串行；有「未生成/全部/取消」 |
 | 试听 | 可用。单句 / 连续切换；中文导出文件可正常播放；播放条支持拖动和 0.5-3.0 倍速 |
-| 云音色 | 可用。小米 MiMo + 千问 TTS（DashScope）+ 自定义 OpenAI 兼容 TTS；设计音色卡、加入本地音色库 |
+| 云音色 | 可用。小米 MiMo + 千问 TTS（DashScope）+ 自定义 OpenAI 兼容 TTS；设计音色卡、加入本地音色库、试听缓存、播放/暂停、切卡片和重新生成 |
 | 音色历史 | 可用。每个角色记录用过的音色，可单条移除 |
 | 章节 | 可用。新建、重命名、删除、编辑原文、单章生成 |
 | 成片导出 | 可用。按章节 / 整本单轨 / 整本分章节 ZIP；时间轴按全章顺序估算，悬停看句子和时间；历史保存在本地 |
@@ -30,7 +30,7 @@
 | 生成 | 代码可用，但 2026-11-08 丢失的原始参考音频仍需补齐 |
 | 音色 | `meta.json`、`cloud.json` 和 7 条本地样本 |
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
-| MCP | 可用。依赖已安装，支持 `list_projects`、读写、生成、审计；权限四档，默认 generate；OpenCode 需重启后重新连接 |
+| MCP | 可用。26 个工具覆盖建项目、章节/台词、角色/音色、生成、导出、回收站和启动软件；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
 | Git | 已初始化。`design/ui-refresh` 已合并到 `main`；`optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理，只保留 `main` |
 
@@ -53,13 +53,13 @@
 Git 工作流：
 
 ```powershell
-git switch design/ui-refresh  # 当前 UI 重构分支
+git switch main
 git status
 git add -A
 git commit -m "feat: 说明改了什么"
 ```
 
-`main` 保留稳定基线；功能分支合并回 `main` 前先跑构建。
+后续直接在 `main` 开发；新功能可以开短分支，合并后清理。合并前先跑构建。
 
 开发：
 
@@ -90,7 +90,8 @@ npm.cmd run check:studio
   "voiceLib": "",
   "python": "",
   "indexttsCodeDir": "",
-  "indexttsModelDir": ""
+  "indexttsModelDir": "",
+  "indexttsVersion": "2.5"
 }
 ```
 
@@ -105,6 +106,7 @@ npm.cmd run check:studio
 | 生成音频 | `engine/outputs/*.wav` |
 | 参考音频 | `voices/*.wav` + `voices/meta.json` |
 | 设计音色 | `voices/cloud/*.wav` + `voices/cloud.json` |
+| 云音色试听缓存 | `voices/.cloud-samples/*.wav`，删除云音色时同步清理 |
 | 引擎配置 | `engine/config.json` |
 | AI 配置 | `%APPDATA%/shengkan/ai.json` |
 | 开发日志 | `%APPDATA%/shengkan/logs/app.log` |
@@ -119,6 +121,12 @@ npm.cmd run check:studio
 - 规则重拆只按原文文字精确匹配保留旧标注；改过标点或文字的句子会按新结果重建，需要重新 AI 标注
 - 跨段续句会合并成一句旁白，`paragraph` 取第一段，切原文时高亮句子开头所在段
 - 云 TTS 已接入小米 MiMo、千问 TTS（DashScope）和自定义 OpenAI 兼容服务；DeepSeek 目前只用于文本分析
+- 云音色试听优先播放 `voices/.cloud-samples` 缓存；第一次需要云合成，设计音色首次直接播参考音频
+- 云音色「重新生成」：预置音色重新合成试听；设计音色按 `desc` 重新设计参考音频并覆盖 `voices/cloud/<id>.wav`，旧文件进 `voices/.trash`
+- 云音色试听支持播放/暂停，点其他卡片会停止当前并播放新音色；快速切换只保留最后一次点击
+- 本机 Python 的 IndexTTS 2.0 不支持语速和 2.5 的多语言参数；2.5 的 `lang` / `duration_factor` 不会发给 2.0
+- 自定义文本 AI 默认 8192 输出上限；遇到不支持 `response_format` 或 max_tokens 超限时自动降级重试一次
+- 设置页「AI 服务」底部显示当前生效的 `ai.json`（Key 打码），可打开所在目录
 - 模型列表依赖服务商 `/models`；不提供或无法区分文本/TTS 时显示全部，仍可手填
 - 深度思考开关只对 MiMo 等支持 `thinking` 的服务商生效；其他服务商不传该字段，有 reasoning_content 时仍会显示
 - 云端生成并发默认 2，失败后串行重试并留 700ms 间隔；仍失败会在本次生成卡片里显示数量
@@ -127,6 +135,8 @@ npm.cmd run check:studio
 - 自定义文本 AI 的思考强度只在勾选后发送 `reasoning_effort`；不勾选使用模型默认，TTS 不参与
 - 整章标注超过 220 句或 6 万字符会分段，段间带前后各 8 句上下文；每段独立判断，跨段指代可能丢失
 - MCP 权限由启动环境变量 `SHENGKAN_MCP_PERMISSION` 控制，默认 generate；应用内只能查看说明
+- MCP 的 `generate_chapter` / `generate_project` 只支持已绑定本地音色的角色；云音色会跳过并返回 `skippedLines`，需要在软件里生成
+- MCP 和软件同时写同一个项目时没有文件锁；批量生成或大改前先确认软件里没有同章未保存编辑
 - 旧项目里两个角色已经绑到同一个音色时，需要手动解绑一个；重复 id 会在加载时去重
 - 开发日志 5 MB 轮转，保留 1 份备份；设置页可清空
 - 给 AI 书名是合理的上下文，但没有自动联网搜索角色名；AI 只结合自身已知信息和原文

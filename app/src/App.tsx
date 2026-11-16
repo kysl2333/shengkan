@@ -206,14 +206,13 @@ export default function App() {
             onDroppedHandled={() => setDropped(null)}
           />
         )}
-        {page === "studio" && (
-          <Studio
-            project={project}
-            onSave={persist}
-            action={pendingAction}
-            onActionDone={() => setPendingAction(null)}
-          />
-        )}
+        <Studio
+          project={project}
+          onSave={persist}
+          action={pendingAction}
+          onActionDone={() => setPendingAction(null)}
+          active={page === "studio"}
+        />
         {page === "cast" && <Cast project={project} onSave={persist} />}
         {page === "master" && <Master project={project} />}
         {page === "settings" && <Settings />}

@@ -1,5 +1,71 @@
 # 开发记录
 
+## 2026-11-16 · TTS 卡片、云音色试听和 MCP 全流程
+
+### 根因
+
+- TTS AI 用勾选框，和文本 AI 的服务商卡片风格不一致
+- 云音色试听每次点击都锁住全部按钮，播放中不能暂停，也不能直接切到别的卡片
+- 「刷新」语义不清，设计音色只是重新合成试听，没有真正按描述重生成
+- 连续试听每切一句都强制滚动，用户想边听边翻台词时会被拉回去
+- MCP 只有 8 个工具，只能读、改单句和单句生成，做不了建项目、绑音色、整章生成和导出
+
+### 完成
+
+- TTS 服务商改为三张卡片，可多选，配置区随启用状态展开
+- 云音色用独立的 `cloudAudioRef`：播放键支持暂停/继续，切卡片先停旧的再播新的；请求带序号，旧请求不会覆盖新点击
+- 「重新生成」对设计音色调用 `designPreview` 按 `desc` 重新设计参考音频，旧文件进 `voices/.trash`；预置音色重新合成试听
+- 播放条新增 `player-follow` 开关，`flashLine` 只在跟随时 `scrollIntoView`
+- MCP 新增 `get_health`、`list_voices`、`create_project`、`update_project`、`add_chapter`、`update_chapter`、`replace_chapter_lines`、`add_line`、`delete_line`、`add_cast`、`update_cast`、`bind_voice`、`generate_chapter`、`generate_project`、`export_audio`、`trash_project`、`restore_project`、`open_app`
+- MCP 建项目会自动规则拆句并补角色；改名角色会同步台词 speaker
+- 云音色生成在 Electron 主进程，MCP 进程拿不到 Key 和代理，批量生成会跳过并返回原因
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `npm.cmd run check:studio` 通过：20/20
+- MCP 全流程测试 11/11：建项目、拆句、补角色、绑定音色、改台词、回收站、恢复、健康检查、音色列表
+- `node --check` 通过
+
+### 坑
+
+- 云音色不能用本地音色的 `audioRef`，否则两套播放状态互相覆盖；必须独立 audio + 请求序号
+- MCP 的 `readProject` 会设置 `currentFile`，写入工具调用前必须先读项目
+- MCP 生成只支持本地 `voicePath`；不要假装能调云 TTS
+- 设计音色重新生成会覆盖 `cloud/<id>.wav`，必须先 `moveToTrash` 旧文件
+
+## 2026-11-16 · 工作台状态、云音色试听和 IndexTTS 2.0
+
+### 根因
+
+- `App` 用 `page === "studio"` 条件渲染，切到「角色与音色」时 `Studio` 被卸载，章节、选中句、滚动位置全部回到初始值
+- 云音色试听每次都调用 `cloudTTS` 重新合成，设计音色也不例外；没有本地样本缓存
+- 本地 Python 封装写死 `indextts.infer_v2_5` 和 `IndexTTS 2.5` 标签
+- 自定义文本 AI 沿用 MiMo 的 16384 输出上限，部分 OpenAI 兼容服务会拒绝；`response_format` 也无法关闭
+- 设置页看不到当前实际生效的 `ai.json`
+
+### 完成
+
+- `Studio` 常驻挂载，`active` 控制 `page.active`；切页暂停音频，稿纸 `onScroll` 记录位置，切回恢复
+- 新增 `cloud:sample`：缓存在 `voices/.cloud-samples/<id>.wav`；设计音色首次直接复制参考音频，预置/克隆音色才云合成；刷新按钮强制重新生成
+- `materialize` 复用试听缓存；删除云音色时清理缓存
+- `engine/server.py` 按 `INDEXTTS_VERSION` 加载 `infer_v2_5` / `infer_v2`，2.0 用 `use_fp16`，不传 `lang` / `duration_factor`
+- 设置页新增 IndexTTS 2.0/2.5 选择；`/health`、顶栏和工作台显示实际版本
+- `chatJSON` 非 MiMo 默认 8192，4xx 命中 `response_format` / `max_tokens` 时降级重试一次
+- 设置页显示打码后的 `ai.json` 和路径
+
+### 验证
+
+- `npm.cmd run build` 通过
+- `npm.cmd run check:studio` 通过：20/20
+- `python -m py_compile engine/server.py` 通过
+
+### 坑
+
+- `Studio` 常驻后 `display:none` 会让 `.script` 的 `scrollTop` 归零，不能切走时读取；必须在 `onScroll` 持续记录
+- 云音色缓存要放在 `voices/.cloud-samples` 并跳过隐藏目录，否则会混进本地音色库
+- 本地 Python 的 `/v1/voice-audio` 只接受绝对路径，缓存是相对路径，必须先按 `VOICE_LIB` 解析
+
 ## 2026-11-11 · 时间轴、AI 长思考和自定义思考强度
 
 ### 根因

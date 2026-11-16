@@ -144,6 +144,11 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 
 ## 约定
 
+- 代码注释只写必要的结论或这段代码的作用，不写「用户说 / 用户要求」「第 N 次更新」「某年某月某日修改」这类沟通记录。
+- 工作台 `Studio` 在 `App` 里常驻挂载，切页只切 `active`；不要改回条件渲染，否则章节、选中句和滚动位置会丢。
+- 云音色试听走 `voices/.cloud-samples` 缓存，首次没有才调云 TTS；刷新按钮强制重新生成。缓存目录以 `.` 开头，本地音色扫描必须跳过。
+- 本机 Python 引擎按 `INDEXTTS_VERSION` 加载 `infer_v2_5` / `infer_v2`；2.0 不要发送 `lang` / `duration_factor`。
+- 设置页显示当前 `ai.json`（Key 打码）；新增 AI 配置项时同步 `AiConfig` 类型和默认值。
 - 界面和文档全中文，代码标识符用英文。
 - 主题存在 `<html data-theme="light|dark">`，选择写 `localStorage` 的 `shengkan:theme`；默认 `light`，`index.html` 在 React 前先读，避免闪白。
 - 颜色只用 `styles.css` 里的语义 token：`--accent` 是操作，`--brass` 是时间，`--danger` 是错误/删除；不要在组件里写死颜色。
@@ -184,6 +189,12 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 标注提示词必须禁止模型在思考里逐句罗列 id/角色/情绪/语速或预演完整 JSON；否则几百句的章节会思考十几分钟。
 - 角色标注提示词不能鼓励「根据引号里的名字判断说话人」；名字出现在引号内容里不等于说话人。
 - MCP 权限用 `SHENGKAN_MCP_PERMISSION=read|edit|generate|full`，默认 `generate`；写操作和生成在 server 内还有第二道限制。
+- MCP 工具要覆盖全流程：建项目、章节/台词、角色/音色绑定、整章/整本生成、导出、回收站和 `open_app`；不要在设置页只写旧的 8 个工具。
+- MCP 批量生成只支持本地 `voicePath`；云音色在 Electron 主进程，MCP 拿不到 Key 和代理，跳过并在结果里返回原因，不要假装能生成。
+- 云音色试听用独立 `cloudAudioRef` 和请求序号；播放键要能暂停/继续，切卡片先停旧的再播新的，旧请求返回后不能抢播放。
+- 「重新生成」对设计音色要按 `desc` 重新设计参考音频并覆盖 `voices/cloud/<id>.wav`，旧文件先 `moveToTrash`；预置音色只重新合成试听。
+- 连续试听必须提供跟随开关；关闭后 `flashLine` 只闪烁不 `scrollIntoView`，让用户自己翻台词稿。
+- TTS AI 的服务商和文本 AI 一样用卡片表示，可同时启用多个；不要退回勾选框。
 - 开发日志 5 MB 轮转、保留 1 份备份；不要在 UI 里假装日志无限增长。
 - 云音色通过 `ProjectCast.cloudModel/cloudVoice/cloudName` 绑定；绑定本地音色时必须清空这三个字段。
 - 小米云 TTS 用 `mimo-v2.5-tts`（预置）、`mimo-v2.5-tts-voicedesign`（设计）、`mimo-v2.5-tts-voiceclone`（克隆）。

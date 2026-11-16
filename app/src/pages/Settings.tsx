@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { getHealth } from "../api";
 import { getEngineConfig, setEngineConfig, type EngineConfig } from "../config";
-import { getAiConfig, setAiConfig, testAi, getDefaultPrompts, listModels, type AiConfig, type ModelListResult } from "../ai";
+import { getAiConfig, setAiConfig, testAi, getDefaultPrompts, listModels, getAiConfigPath, type AiConfig, type ModelListResult } from "../ai";
+import { revealFile } from "../projects";
 import { clearLog, log, logInfo, openLog, type LogInfo } from "../log";
 
 const nav = ["AI 服务", "语音引擎", "开发与 MCP"];
@@ -47,6 +48,19 @@ function Row({ label, help, children }: { label: string; help: string; children:
       <div>{children}</div>
     </div>
   );
+}
+
+function maskedAiConfig(cfg: AiConfig | null) {
+  if (!cfg) return "";
+  const copy = JSON.parse(JSON.stringify(cfg)) as AiConfig;
+  const mask = (target?: { apiKey?: string }) => {
+    if (target && target.apiKey) target.apiKey = "***";
+  };
+  mask(copy);
+  mask(copy.mimoTts);
+  mask(copy.qwenTts);
+  mask(copy.customTts);
+  return JSON.stringify(copy, null, 2);
 }
 
 function formatBytes(size = 0) {
@@ -144,6 +158,7 @@ export default function Settings() {
   const [cfg, setCfg] = useState<EngineConfig | null>(null);
   const [cfgSaved, setCfgSaved] = useState("");
   const [aiCfg, setAiCfg] = useState<AiConfig | null>(null);
+  const [aiPath, setAiPath] = useState("");
   const [aiSaved, setAiSaved] = useState("");
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
@@ -155,6 +170,7 @@ export default function Settings() {
   useEffect(() => {
     getEngineConfig().then(setCfg).catch(() => {});
     getAiConfig().then(setAiCfg).catch(() => {});
+    getAiConfigPath().then(setAiPath).catch(() => {});
     getDefaultPrompts().then(setPromptDefaults).catch(() => {});
     logInfo().then((info) => {
       if (!info) return;
@@ -370,30 +386,63 @@ export default function Settings() {
           <div className="setting-group">
             <Row
               label="云 TTS 服务"
-              help="关闭后云音色列表、云生成和设计音色都会停用；已经绑定的角色需要改用本地音色。"
+              help="可以同时启用多个；关闭后对应云音色、试听和云生成都会停用。"
             >
-              <div
-                className="check-row"
-                style={{ cursor: "pointer" }}
-                onClick={() =>
-                  aiCfg &&
-                  setAiCfg({
-                    ...aiCfg,
-                    cloudProviders: {
-                      ...aiCfg.cloudProviders,
-                      mimo: aiCfg.cloudProviders?.mimo === false,
-                    },
-                  })
-                }
-              >
-                <span className={`check ${aiCfg?.cloudProviders?.mimo !== false ? "on" : ""}`}>
-                  {aiCfg?.cloudProviders?.mimo !== false ? "✓" : " "}
-                </span>
-                启用小米 MiMo TTS
+              <div className="mode-cards">
+                <div
+                  className={`mode-card ${aiCfg?.cloudProviders?.mimo !== false ? "on" : ""}`}
+                  onClick={() =>
+                    aiCfg &&
+                    setAiCfg({
+                      ...aiCfg,
+                      cloudProviders: {
+                        ...aiCfg.cloudProviders,
+                        mimo: aiCfg.cloudProviders?.mimo === false,
+                      },
+                    })
+                  }
+                >
+                  <b>小米 MiMo</b>
+                  <span>
+                    {aiCfg?.cloudProviders?.mimo !== false ? "已启用" : "已关闭"} · 预置音色、设计音色和克隆
+                  </span>
+                </div>
+                <div
+                  className={`mode-card ${aiCfg?.qwenTts?.enabled ? "on" : ""}`}
+                  onClick={() =>
+                    aiCfg &&
+                    setAiCfg({
+                      ...aiCfg,
+                      qwenTts: { ...aiCfg.qwenTts, enabled: !aiCfg.qwenTts?.enabled },
+                    })
+                  }
+                >
+                  <b>千问 TTS</b>
+                  <span>
+                    {aiCfg?.qwenTts?.enabled ? "已启用" : "已关闭"} · DashScope 原生 TTS
+                  </span>
+                </div>
+                <div
+                  className={`mode-card ${aiCfg?.customTts?.enabled ? "on" : ""}`}
+                  onClick={() =>
+                    aiCfg &&
+                    setAiCfg({
+                      ...aiCfg,
+                      customTts: { ...aiCfg.customTts, enabled: !aiCfg.customTts?.enabled },
+                    })
+                  }
+                >
+                  <b>自定义 TTS</b>
+                  <span>
+                    {aiCfg?.customTts?.enabled ? "已启用" : "已关闭"} · OpenAI 兼容 /audio/speech
+                  </span>
+                </div>
               </div>
-              <div className="tool-help">
-                小米 MiMo 内置 TTS；千问和自定义 TTS 需要各自的 Key。关闭后对应云音色和云生成会停用。
-              </div>
+            </Row>
+
+            {aiCfg?.cloudProviders?.mimo !== false && (
+              <div className="tts-provider-panel">
+              <div className="section-label">小米 MiMo</div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
                 <Row label="MiMo TTS Key" help="AI 服务商不是小米时，这里单独填 MiMo TTS 的 Key；留空则沿用上面的 AI Key。">
@@ -427,25 +476,13 @@ export default function Settings() {
                   预置音色使用 mimo-v2.5-tts；克隆和设计模型由音色卡决定，模型名随音色卡保存。
                 </div>
               </div>
-
-              <div
-                className="check-row"
-                style={{ cursor: "pointer", marginTop: 10 }}
-                onClick={() =>
-                  aiCfg &&
-                  setAiCfg({
-                    ...aiCfg,
-                    qwenTts: { ...aiCfg.qwenTts, enabled: !aiCfg.qwenTts?.enabled },
-                  })
-                }
-              >
-                <span className={`check ${aiCfg?.qwenTts?.enabled ? "on" : ""}`}>
-                  {aiCfg?.qwenTts?.enabled ? "✓" : " "}
-                </span>
-                启用千问 TTS（DashScope）
               </div>
-              {aiCfg?.qwenTts?.enabled && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+            )}
+
+            {aiCfg?.qwenTts?.enabled && (
+              <div className="tts-provider-panel">
+              <div className="section-label">千问 TTS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
                   <Row label="DashScope API Key" help="百炼控制台的 API Key。">
                     <input
                       className="input"
@@ -512,29 +549,13 @@ export default function Settings() {
                     />
                   </Row>
                 </div>
-              )}
-
-              <div
-                className="check-row"
-                style={{ cursor: "pointer", marginTop: 8 }}
-                onClick={() =>
-                  aiCfg &&
-                  setAiCfg({
-                    ...aiCfg,
-                    customTts: {
-                      ...aiCfg.customTts,
-                      enabled: !aiCfg.customTts?.enabled,
-                    },
-                  })
-                }
-              >
-                <span className={`check ${aiCfg?.customTts?.enabled ? "on" : ""}`}>
-                  {aiCfg?.customTts?.enabled ? "✓" : " "}
-                </span>
-                启用自定义 TTS
               </div>
-              {aiCfg?.customTts?.enabled && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
+            )}
+
+            {aiCfg?.customTts?.enabled && (
+              <div className="tts-provider-panel">
+              <div className="section-label">自定义 TTS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
                   <Row label="TTS 名称" help="显示在云音色卡片上的名字。">
                     <input
                       className="input"
@@ -602,8 +623,8 @@ export default function Settings() {
                     />
                   </Row>
                 </div>
-              )}
-            </Row>
+              </div>
+            )}
           </div>
           )}
 
@@ -692,6 +713,24 @@ export default function Settings() {
             <button className="btn primary" onClick={saveAiCfg} disabled={!aiCfg}>保存 AI 配置</button>
             {aiSaved && <span className="test-result"><span className="dot ok" />{aiSaved}</span>}
           </div>
+          <div className="setting-group">
+            <Row
+              label="AI 配置文件"
+              help="下面是当前实际生效的配置，Key 已打码；保存上方表单后会实时更新。"
+            >
+              <div className="input-row">
+                <input className="input" value={aiPath} readOnly placeholder="ai.json" />
+                <button
+                  className="btn small"
+                  onClick={() => aiPath && revealFile(aiPath)}
+                  disabled={!aiPath}
+                >
+                  打开目录
+                </button>
+              </div>
+            </Row>
+            <pre className="config-dump">{maskedAiConfig(aiCfg)}</pre>
+          </div>
           </>
           )}
 
@@ -713,6 +752,25 @@ export default function Settings() {
                 >
                   <b>本机 Python（高级）</b>
                   <span>只有完全自动化时再用；需要 IndexTTS 代码和权重。</span>
+                </div>
+              </div>
+            </Row>
+
+            <Row label="IndexTTS 版本" help="本机 Python 模式按这里加载 infer_v2_5 或 infer_v2；Gradio 地址模式只用于显示版本。">
+              <div className="mode-cards">
+                <div
+                  className={`mode-card ${cfg?.indexttsVersion !== "2.0" ? "on" : ""}`}
+                  onClick={() => cfg && setCfg({ ...cfg, indexttsVersion: "2.5" })}
+                >
+                  <b>IndexTTS 2.5</b>
+                  <span>支持语言、时长系数和情感向量。</span>
+                </div>
+                <div
+                  className={`mode-card ${cfg?.indexttsVersion === "2.0" ? "on" : ""}`}
+                  onClick={() => cfg && setCfg({ ...cfg, indexttsVersion: "2.0" })}
+                >
+                  <b>IndexTTS 2.0</b>
+                  <span>兼容旧权重；不支持语速和 2.5 的多语言参数。</span>
                 </div>
               </div>
             </Row>
@@ -753,7 +811,7 @@ export default function Settings() {
                     onChange={(e) => setCfg({ ...cfg, python: e.target.value })}
                   />
                 </Row>
-                <Row label="代码目录" help="包含 indextts/infer_v2_5.py 的目录。">
+                <Row label="代码目录" help="包含 indextts/infer_v2_5.py 或 indextts/infer_v2.py 的目录。">
                   <input
                     className="input"
                     value={cfg.indexttsCodeDir}
@@ -836,28 +894,32 @@ export default function Settings() {
           </div>
 
           <div className="setting-group">
-            <Row label="MCP 服务器" help="让外部 AI 读取项目和修改台词。默认读最近修改的项目。">
+            <Row label="MCP 服务器" help="让外部 AI 读取项目、建项目、改台词、绑音色、生成音频和导出；默认读最近修改的项目。">
               <div className="test-result"><span className="dot ok" />stdio · node mcp/server.mjs</div>
             </Row>
             <Row label="权限" help="通过环境变量 SHENGKAN_MCP_PERMISSION 控制，默认 generate；改完需要重启 OpenCode/MCP 客户端。MCP 客户端决定调用哪个工具，声栞再做第二道限制。">
               <div className="mcp-permissions">
-                <div><b>read</b><span>列项目、读项目、读台词、查审计</span></div>
-                <div><b>edit</b><span>只读 + 改台词/角色/情绪/语速 + 拆句预览</span></div>
-                <div><b>generate</b><span>可改 + 调 TTS 生成音频（默认）</span></div>
-                <div><b>full</b><span>可生成 + 查看回收站项目列表</span></div>
+                <div><b>read</b><span>列项目、读项目、读台词、查音色和审计</span></div>
+                <div><b>edit</b><span>只读 + 建项目/章节/台词/角色/音色 + 拆句</span></div>
+                <div><b>generate</b><span>可改 + 生成单句/整章/整本 + 导出音频（默认）</span></div>
+                <div><b>full</b><span>可生成 + 回收站 + 一键启动软件</span></div>
               </div>
             </Row>
-            <Row label="可用工具" help="用 get_permissions 可以在会话里确认当前级别。">
+            <Row label="可用工具" help="用 get_permissions 可以在会话里确认当前级别和完整工具列表。">
               <div className="tool-chips">
                 {[
-                  "list_projects",
+                  "create_project",
+                  "add_chapter",
+                  "replace_chapter_lines",
+                  "bind_voice",
                   "read_project",
                   "read_lines",
-                  "update_line",
-                  "split_chapter",
-                  "generate_line",
-                  "get_audit",
-                  "get_permissions",
+                  "list_voices",
+                  "get_health",
+                  "generate_chapter",
+                  "generate_project",
+                  "export_audio",
+                  "open_app",
                 ].map((tool) => (
                   <span className="tool-chip" key={tool}>{tool}</span>
                 ))}

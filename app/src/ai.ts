@@ -138,6 +138,12 @@ export async function setAiConfig(cfg: AiConfig): Promise<AiConfig> {
   return cfg;
 }
 
+export async function getAiConfigPath(): Promise<string> {
+  const b = bridge();
+  if (!b) return "";
+  return b.path();
+}
+
 export interface ModelListResult {
   models: string[];
   filtered: boolean;

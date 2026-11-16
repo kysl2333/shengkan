@@ -21,6 +21,7 @@ ipcMain.handle("config:get", () => readConfig());
 ipcMain.handle("config:set", (_event, cfg) => writeConfig(cfg));
 ipcMain.handle("ai:config:get", () => ai.readAiConfig());
 ipcMain.handle("ai:config:set", (_event, cfg) => ai.writeAiConfig(cfg));
+ipcMain.handle("ai:config:path", () => ai.configFile());
 ipcMain.handle("ai:test", () => ai.testConnection());
 ipcMain.handle("ai:default-prompts", () => ai.defaultPrompts());
 ipcMain.handle("ai:cancel-detect", () => ai.cancelDetect());
@@ -54,6 +55,7 @@ ipcMain.handle("ai:extract-casts", (event, text, context) =>
 ipcMain.handle("cloud:list", () => cloud.list());
 ipcMain.handle("cloud:providers", () => cloud.providers());
 ipcMain.handle("cloud:tts", (_event, payload) => cloud.synthesize(payload));
+ipcMain.handle("cloud:sample", (_event, id, options) => cloud.sample(id, options));
 ipcMain.handle("cloud:design-preview", (_event, payload) => cloud.designPreview(payload));
 ipcMain.handle("cloud:save-design", (_event, payload) => cloud.saveDesign(payload));
 ipcMain.handle("cloud:materialize", (_event, id) => cloud.materialize(id));
@@ -64,7 +66,13 @@ ipcMain.handle("log:info", () => logs.info());
 ipcMain.handle("log:clear", () => logs.clear());
 ipcMain.handle("log:open", () => logs.open());
 ipcMain.handle("shell:reveal", (_event, file) => {
-  if (!file || !fs.existsSync(file)) throw new Error(`文件不存在：${file}`);
+  if (!file) throw new Error("缺少文件路径");
+  if (!fs.existsSync(file)) {
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) throw new Error(`目录不存在：${dir}`);
+    shell.openPath(dir);
+    return { ok: true };
+  }
   shell.showItemInFolder(file);
   return { ok: true };
 });

@@ -84,7 +84,7 @@ export default function TopBar({
   page: PageID;
   onNavigate: (p: PageID) => void;
 }) {
-  const [engine, setEngine] = useState({ online: false, model: false, gpu: "" });
+  const [engine, setEngine] = useState({ online: false, model: false, gpu: "", version: "2.5" });
   const [theme, setTheme] = useState<Theme>(initialTheme);
 
   useEffect(() => {
@@ -108,10 +108,11 @@ export default function TopBar({
             gpu: h.gpu
               ? `${h.gpu.used_gb ?? Math.max(0, h.gpu.total_gb - h.gpu.free_gb)}/${h.gpu.total_gb} GB`
               : "",
+            version: h.version || "2.5",
           });
         })
         .catch(() => {
-          if (alive) setEngine({ online: false, model: false, gpu: "" });
+          if (alive) setEngine({ online: false, model: false, gpu: "", version: "2.5" });
         });
     };
     check();
@@ -169,7 +170,7 @@ export default function TopBar({
         <div className="top-status">
           <div className="status-item" title="语音引擎连接状态">
             <span className={`dot ${engine.online ? "ok" : "warn"}`} />
-            {engine.model ? "IndexTTS 2.5 已加载" : engine.online ? "引擎在线" : "引擎未连接"}
+            {engine.model ? `IndexTTS ${engine.version} 已加载` : engine.online ? "引擎在线" : "引擎未连接"}
           </div>
           {engine.gpu && (
             <div className="status-item">

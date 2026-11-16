@@ -562,19 +562,30 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === "/v1/config") {
       if (req.method === "GET") {
-        return json(res, { gradioUrl: GRADIO, gradioApi: GRADIO_API });
+        return json(res, {
+          gradioUrl: GRADIO,
+          gradioApi: GRADIO_API,
+          indexttsVersion: fileConfig.indexttsVersion || "2.5",
+        });
       }
       if (req.method === "POST") {
         const body = await readBody(req);
         if (body.gradioUrl) GRADIO = String(body.gradioUrl).trim().replace(/\/$/, "");
         if (body.gradioApi) GRADIO_API = String(body.gradioApi).trim();
+        if (body.indexttsVersion) fileConfig.indexttsVersion = String(body.indexttsVersion);
         apiSpec = null;
-        fs.writeFileSync(
-          CONFIG_FILE,
-          JSON.stringify({ gradioUrl: GRADIO, gradioApi: GRADIO_API }, null, 2),
-          "utf8"
-        );
-        return json(res, { ok: true, gradioUrl: GRADIO, gradioApi: GRADIO_API });
+        fileConfig = {
+          ...fileConfig,
+          gradioUrl: GRADIO,
+          gradioApi: GRADIO_API,
+        };
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(fileConfig, null, 2), "utf8");
+        return json(res, {
+          ok: true,
+          gradioUrl: GRADIO,
+          gradioApi: GRADIO_API,
+          indexttsVersion: fileConfig.indexttsVersion || "2.5",
+        });
       }
     }
 
@@ -597,6 +608,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, {
         ok: reachable,
         engine: "node-gradio-proxy",
+        version: fileConfig.indexttsVersion || "2.5",
         mode: "gradio",
         gradio: GRADIO,
         api: GRADIO_API,

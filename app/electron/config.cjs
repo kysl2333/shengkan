@@ -16,6 +16,7 @@ const DEFAULTS = {
   python: "",
   indexttsCodeDir: "",
   indexttsModelDir: "",
+  indexttsVersion: "2.5",
 };
 
 function readConfig() {

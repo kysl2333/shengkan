@@ -251,7 +251,7 @@ async function chatJSON(messages, options = {}) {
     body.thinking = { type: options.thinking ? "enabled" : "disabled" };
     if (useStream) body.stream_options = { include_usage: true };
   } else {
-    body.max_tokens = options.maxTokens ?? 16384;
+    body.max_tokens = options.maxTokens ?? 8192;
     if (customEffort) body.reasoning_effort = customEffort;
   }
 
@@ -264,14 +264,39 @@ async function chatJSON(messages, options = {}) {
   };
   if (isMimo) headers["api-key"] = cfg.apiKey;
 
-  let r;
-  try {
-    r = await fetch(`${normalizeBase(cfg.baseUrl)}/chat/completions`, {
+  const send = (payload) =>
+    fetch(`${normalizeBase(cfg.baseUrl)}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       signal,
     });
+
+  let r;
+  try {
+    r = await send(body);
+    // 不同 OpenAI 兼容服务对 response_format 和 max_tokens 的支持不一致；命中限制时降级重试一次。
+    if (!r.ok && r.status >= 400 && r.status < 500) {
+      const raw = await r.text();
+      if (/response_format|json_object|max_tokens|max_completion_tokens|max output|reasoning_effort/i.test(raw)) {
+        const retry = { ...body };
+        delete retry.response_format;
+        delete retry.reasoning_effort;
+        if (retry.max_tokens) retry.max_tokens = Math.min(retry.max_tokens, 4096);
+        if (retry.max_completion_tokens) {
+          retry.max_completion_tokens = Math.min(retry.max_completion_tokens, 4096);
+        }
+        r = await send(retry);
+      } else {
+        let detail = raw.slice(0, 400);
+        try {
+          detail = JSON.parse(raw)?.error?.message || detail;
+        } catch {
+          /* 保留原始文本 */
+        }
+        throw new Error(`AI 请求失败 HTTP ${r.status}：${detail}`);
+      }
+    }
   } catch (e) {
     if (e?.name === "TimeoutError") {
       throw new Error(

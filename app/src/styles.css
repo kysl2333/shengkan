@@ -1972,6 +1972,30 @@ textarea.input {
   flex: 0 0 auto;
 }
 
+.player-follow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: color 0.15s ease-out, border-color 0.15s ease-out, background-color 0.15s ease-out;
+}
+
+.player-follow:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.player-follow.on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .queue {
   display: flex;
   align-items: center;
@@ -3289,6 +3313,10 @@ input.slider[type="range"]::-webkit-slider-thumb {
   color: var(--ink);
 }
 
+.voice-edit:disabled {
+  opacity: 0.4;
+}
+
 .voice-del {
   color: var(--ink-3);
 }
@@ -3685,6 +3713,22 @@ input.slider[type="range"]::-webkit-slider-thumb {
   background: var(--surface);
 }
 
+.config-dump {
+  max-height: 320px;
+  overflow: auto;
+  margin: 2px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .settings-inner {
   max-width: 680px;
 }
@@ -3906,6 +3950,21 @@ input.slider[type="range"]::-webkit-slider-thumb {
   font-size: 10px;
   color: var(--ink-3);
   line-height: 1.6;
+}
+
+.tts-provider-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.tts-provider-panel > .section-label {
+  padding: 0;
 }
 
 .tool-chips {

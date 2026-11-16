@@ -12,6 +12,7 @@ const VOICES = path.join(__dirname, "..", "..", "voices");
 const CLOUD_DIR = path.join(VOICES, "cloud");
 const CLOUD_JSON = path.join(VOICES, "cloud.json");
 const PREVIEW_DIR = path.join(VOICES, ".preview");
+const SAMPLE_DIR = path.join(VOICES, ".cloud-samples");
 const META_FILE = path.join(VOICES, "meta.json");
 const TRASH_DIR = path.join(VOICES, ".trash");
 
@@ -301,6 +302,85 @@ function list() {
   });
 }
 
+function sampleFileFor(id) {
+  const safe = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "_") || "voice";
+  return path.join(SAMPLE_DIR, `${safe}.wav`);
+}
+
+async function regenerateDesign(item) {
+  const preview = await designPreview({
+    name: item.name,
+    description: item.desc || item.name,
+    previewText:
+      "你好，这是重新生成的音色试听。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。",
+  });
+  const src = path.join(PREVIEW_DIR, `${preview.tempId}.wav`);
+  if (!fs.existsSync(src)) throw new Error("重新生成的试听文件不存在");
+  const dest = path.join(CLOUD_DIR, `${item.id}.wav`);
+  fs.mkdirSync(CLOUD_DIR, { recursive: true });
+  if (fs.existsSync(dest)) moveToTrash(dest);
+  fs.copyFileSync(src, dest);
+  try {
+    fs.unlinkSync(src);
+  } catch {
+    /* 预览临时文件可以留着 */
+  }
+
+  const saved = readCloud();
+  const record = saved.find((voice) => voice.id === item.id);
+  if (record) {
+    record.voice = dest;
+    record.updatedAt = new Date().toISOString();
+    writeCloud(saved);
+  }
+  return dest;
+}
+
+async function sample(id, { refresh = false } = {}) {
+  const item = list().find((voice) => voice.id === id);
+  if (!item) throw new Error("找不到云音色");
+
+  fs.mkdirSync(SAMPLE_DIR, { recursive: true });
+  const dest = sampleFileFor(item.id);
+  const file = path.basename(dest);
+  const url = `/v1/voice-audio?path=.cloud-samples/${file}`;
+
+  if (!refresh && fs.existsSync(dest)) {
+    return { ...item, file: dest, url, cached: true };
+  }
+
+  // 设计音色重新生成：按保存的描述重新设计一版参考音频，旧文件进回收站。
+  if (
+    refresh &&
+    item.provider === "mimo" &&
+    item.model === "mimo-v2.5-tts-voiceclone" &&
+    item.desc
+  ) {
+    const regenerated = await regenerateDesign(item);
+    fs.copyFileSync(regenerated, dest);
+    return { ...item, file: dest, url, cached: false };
+  }
+
+  // 设计音色的参考音频本身就是可播放样本，首次试听直接复制，不再花一次云合成。
+  if (!refresh && item.voice && path.isAbsolute(item.voice) && fs.existsSync(item.voice)) {
+    fs.copyFileSync(item.voice, dest);
+    return { ...item, file: dest, url, cached: false };
+  }
+
+  const isEnglish = ["mimo-mia", "mimo-chloe", "mimo-milo", "mimo-dean"].includes(item.id);
+  const text = isEnglish
+    ? "Hello, this is a voice sample. Take your time, and let's have a natural conversation."
+    : "你好，这是音色试听。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。";
+  const r = await synthesize({ text, model: item.model, voice: item.voice });
+  fs.copyFileSync(r.file, dest);
+  try {
+    fs.unlinkSync(r.file);
+  } catch {
+    /* 临时文件可以留着 */
+  }
+  return { ...item, file: dest, url, cached: false };
+}
+
 async function materialize(id) {
   const item = list().find((voice) => voice.id === id);
   if (!item) throw new Error("找不到云音色");
@@ -309,16 +389,21 @@ async function materialize(id) {
   const dest = path.join(VOICES, local);
 
   if (!fs.existsSync(dest)) {
-    let src = item.voice;
-    if (!src || !path.isAbsolute(src) || !fs.existsSync(src)) {
-      const isEnglish = ["mimo-mia", "mimo-chloe", "mimo-milo", "mimo-dean"].includes(item.id);
-      const text = isEnglish
-        ? "Hello, this is a voice sample. Take your time, and let's have a natural conversation."
-        : "你好，这是音色样本。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。";
-      const r = await synthesize({ text, model: item.model, voice: item.voice });
-      src = r.file;
+    const cached = sampleFileFor(item.id);
+    if (fs.existsSync(cached)) {
+      fs.copyFileSync(cached, dest);
+    } else {
+      let src = item.voice;
+      if (!src || !path.isAbsolute(src) || !fs.existsSync(src)) {
+        const isEnglish = ["mimo-mia", "mimo-chloe", "mimo-milo", "mimo-dean"].includes(item.id);
+        const text = isEnglish
+          ? "Hello, this is a voice sample. Take your time, and let's have a natural conversation."
+          : "你好，这是音色样本。今天想和你聊一会儿，不用着急，想到什么就说什么，我会认真听你把话说完。";
+        const r = await synthesize({ text, model: item.model, voice: item.voice });
+        src = r.file;
+      }
+      fs.copyFileSync(src, dest);
     }
-    fs.copyFileSync(src, dest);
   }
 
   const meta = readMeta();
@@ -610,6 +695,15 @@ function remove(id) {
   const moved = record.voice && fs.existsSync(record.voice) ? moveToTrash(record.voice) : "";
   writeCloud(saved.filter((voice) => voice.id !== id));
 
+  const cached = sampleFileFor(id);
+  if (fs.existsSync(cached)) {
+    try {
+      fs.unlinkSync(cached);
+    } catch {
+      /* 缓存删不掉不影响音色记录 */
+    }
+  }
+
   const meta = readMeta();
   delete meta[`cloud/${path.basename(record.voice)}`];
   writeMeta(meta);
@@ -647,6 +741,7 @@ module.exports = {
   list,
   providers,
   synthesize,
+  sample,
   designPreview,
   saveDesign,
   materialize,
