@@ -82,10 +82,11 @@ export function synthesize(payload: {
   emo_alpha?: number;
   emo_text?: string;
 }) {
-  return json<{ ok: boolean; file: string; url: string }>(`${ENGINE}/v1/tts`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return json<{ ok: boolean; file: string; url: string }>(
+    `${ENGINE}/v1/tts`,
+    { method: "POST", body: JSON.stringify(payload) },
+    240_000
+  );
 }
 
 export function exportAudio(payload: {
