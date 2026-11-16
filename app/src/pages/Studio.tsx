@@ -1026,6 +1026,7 @@ export default function Studio({
       saveLines(next, casts);
 
       if (res.cancelled) {
+        setTask("idle");
         addLog(`已停止，保留已完成部分：修改 ${changed} 句`);
       } else {
         addLog(`AI 标注完成：修改 ${changed} 句 · ${casts.length} 个角色`);

@@ -33,6 +33,7 @@ export default function App() {
   const [saveError, setSaveError] = useState("");
   const [studioBusy, setStudioBusy] = useState(false);
   const [reloadConfirm, setReloadConfirm] = useState(false);
+  const [reloadEpoch, setReloadEpoch] = useState(0);
   const draftRef = useRef<Project | null>(null);
   const saveErrorRef = useRef("");
   const dragDepth = useRef(0);
@@ -112,7 +113,7 @@ export default function App() {
   function downloadDraft() {
     const draft = draftRef.current ?? project;
     if (!draft) return;
-    const { __storageVersion: _version, ...content } = draft;
+    const { __storageVersion: _version, __storageSession: _session, ...content } = draft;
     const url = URL.createObjectURL(new Blob([JSON.stringify(content, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -127,6 +128,7 @@ export default function App() {
       const loaded = await loadProject(project.id);
       draftRef.current = loaded;
       setProject(loaded);
+      setReloadEpoch((value) => value + 1);
       saveErrorRef.current = "";
       setSaveError("");
       setReloadConfirm(false);
@@ -275,6 +277,7 @@ export default function App() {
           />
         )}
         <Studio
+          key={reloadEpoch}
           project={project}
           onSave={persist}
           action={pendingAction}

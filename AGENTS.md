@@ -146,7 +146,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 
 - 对外中文名「声栞（Shiori Voices）」只出现在界面、介绍和 logo；安装包、exe、安装目录、快捷方式、项目/音色目录、用户数据目录、`appId`、npm name、MCP server 名和环境变量都用 `shengkan`，不要用中文或 Shiori Voices 命名文件。
 - 代码注释只写必要的结论或这段代码的作用，不写「用户说 / 用户要求」「第 N 次更新」「某年某月某日修改」这类沟通记录。
-- 工作台 `Studio` 在 `App` 里常驻挂载，切页只切 `active`；不要改回条件渲染，否则章节、选中句和滚动位置会丢。
+- 工作台 `Studio` 在 `App` 里常驻挂载，切页只切 `active`；不要改回条件渲染，否则章节、选中句和滚动位置会丢。仅显式确认重新载入项目时重建工作台，清除已失效的章节与临时状态。
 - 云音色试听走 `voices/.cloud-samples` 缓存，首次没有才调云 TTS；刷新按钮强制重新生成。缓存目录以 `.` 开头，本地音色扫描必须跳过。
 - 本机 Python 引擎按 `INDEXTTS_VERSION` 加载 `infer_v2_5` / `infer_v2`；2.0 不要发送 `lang` / `duration_factor`。
 - 设置页显示当前 `ai.json`（Key 打码）；新增 AI 配置项时同步 `AiConfig` 类型和默认值。

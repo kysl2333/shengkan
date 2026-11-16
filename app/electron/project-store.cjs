@@ -42,6 +42,7 @@ function write(file, project, expectedVersion) {
 
     const stored = { ...project };
     delete stored.__storageVersion;
+    delete stored.__storageSession;
     const bytes = Buffer.from(JSON.stringify(stored, null, 2), "utf8");
     const version = versionOf(bytes);
     tempFd = fs.openSync(temp, "wx");

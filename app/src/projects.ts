@@ -46,6 +46,7 @@ export interface ProjectChapter {
 
 export interface Project {
   __storageVersion?: string;
+  __storageSession?: string;
   id: string;
   title: string;
   createdAt: string;
@@ -295,6 +296,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 interface SaveSession {
+  id: string;
   version?: string;
   accepted: Set<string | undefined>;
   tail: Promise<unknown>;
@@ -304,7 +306,10 @@ interface SaveSession {
 const saveSessions = new Map<string, SaveSession>();
 
 function beginSaveSession(project: Project) {
+  const id = crypto.randomUUID();
+  project.__storageSession = id;
   saveSessions.set(project.id, {
+    id,
     version: project.__storageVersion,
     accepted: new Set([project.__storageVersion]),
     tail: Promise.resolve(),
@@ -333,11 +338,12 @@ export async function saveProject(project: Project): Promise<ProjectSummary> {
     const snapshot = JSON.parse(JSON.stringify(project)) as Project;
     const task = session.tail.then(async () => {
       if (session.error) throw session.error;
-      if (saveSessions.get(project.id) !== session || !session.accepted.has(snapshot.__storageVersion)) {
+      if (saveSessions.get(project.id) !== session || snapshot.__storageSession !== session.id || !session.accepted.has(snapshot.__storageVersion)) {
         throw new Error("PROJECT_CONFLICT 项目会话已变化，请保留草稿并重新载入");
       }
       try {
-        const result = await window.shengkan!.projects.save({ ...snapshot, __storageVersion: session.version });
+        const { __storageSession: _session, ...content } = snapshot;
+        const result = await window.shengkan!.projects.save({ ...content, __storageVersion: session.version });
         session.version = result.__storageVersion ?? session.version;
         session.accepted.add(session.version);
         return result;
