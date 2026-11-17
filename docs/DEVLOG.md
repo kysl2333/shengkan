@@ -9,6 +9,7 @@
 - 自定义目录必须以 `\shengkan` 结尾，避免直接把 `D:\Tools` 当成应用目录
 - 非空目录只允许已有的声栞安装（标记，或 `shengkan.exe` + `Uninstall shengkan.exe`）
 - 安装完成写入隐藏标记 `.shengkan-install`；普通卸载缺标记时停止，升级安装跳过检查
+- v1.0.1 旧安装如果不在专用 `\shengkan` 目录，升级前拒绝，避免旧卸载器删除共享目录
 
 ### 改动
 

@@ -9,6 +9,30 @@
 
 !ifndef BUILD_UNINSTALLER
 
+  Function shengkanCheckLegacyInstallDir
+    ; 旧版安装在非专用目录时，升级会先运行旧卸载器并删除整个目录。
+    ; 这里在安装前拦住，要求用户先手动清理旧版。
+    IfFileExists "$INSTDIR\shengkan.exe" 0 shengkan_legacy_done
+    IfFileExists "$INSTDIR\Uninstall shengkan.exe" 0 shengkan_legacy_done
+
+    StrLen $R0 "$INSTDIR"
+    IntOp $R1 $R0 - 9
+    IntCmp $R1 0 shengkan_legacy_check shengkan_legacy_refuse shengkan_legacy_check
+
+    shengkan_legacy_check:
+      StrCpy $R2 "$INSTDIR" 9 $R1
+      StrCmp $R2 "\shengkan" shengkan_legacy_done
+
+    shengkan_legacy_refuse:
+      IfSilent shengkan_legacy_abort 0
+        MessageBox MB_ICONSTOP "检测到旧版声栞安装在非专用目录。直接升级会先运行旧卸载器并删除该目录。请先备份并手动清理旧版，或改装到默认目录后重新安装。"
+      shengkan_legacy_abort:
+        SetErrorLevel 1
+        Quit
+
+    shengkan_legacy_done:
+  FunctionEnd
+
   Function shengkanPrepareInstallDir
     StrLen $R0 "$INSTDIR"
     StrCmp $R0 0 shengkan_prepare_done
@@ -77,6 +101,7 @@
   !endif
 
   !macro customInit
+    Call shengkanCheckLegacyInstallDir
     Call shengkanPrepareInstallDir
     IfSilent 0 shengkan_custom_init_done
       Call shengkanValidateInstallDir
