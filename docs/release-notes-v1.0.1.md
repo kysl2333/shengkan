@@ -23,6 +23,8 @@
 
 - 下载 `shengkan-1.0.1-setup.exe`，Windows 10 / 11 x64
 - 安装包未签名，Windows SmartScreen 可能提示「未知发布者」
+- 建议使用默认安装目录或新建空目录；卸载会删除安装目录内的所有文件
+- 默认卸载不会删除 `Documents/shengkan-projects`、`Documents/shengkan-voices` 或 `%APPDATA%/shengkan`
 - SHA-256：
 
 ```text

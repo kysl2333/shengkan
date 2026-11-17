@@ -155,6 +155,7 @@ npm.cmd run check:studio
 - 旧项目的错误角色不会自动清理，用「清理无效角色」或整本角色标注
 - 远端 WebUI 关掉后生成报连接失败
 - `release/` 里的安装包是构建产物，改了代码要重新 `npm run dist`；当前 v1.0.1 已发布
+- NSIS 卸载器会 `RMDir /r $INSTDIR`；不要把其他文件放进安装目录。默认不会删除 `Documents/shengkan-projects`、`Documents/shengkan-voices` 或 `%APPDATA%/shengkan`，只有显式传 `--delete-app-data` 才会清理 `%APPDATA%/shengkan`
 
 ## 待办
 

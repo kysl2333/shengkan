@@ -29,6 +29,7 @@
 - [⬇️ shengkan-1.0.1-setup.exe](https://github.com/kysl2333/shengkan/releases/download/v1.0.1/shengkan-1.0.1-setup.exe)，Windows 10 / 11 x64
 - [🐙 GitHub Release](https://github.com/kysl2333/shengkan/releases/tag/v1.0.1)
 - 安装包未签名，Windows SmartScreen 可能提示「未知发布者」
+- 建议使用默认安装目录或新建空目录；卸载会删除安装目录内的所有文件，请不要把其他文件放进安装目录。项目、音色和 AI 配置默认不会被删除。
 
 ### ⚠️ 已知限制
 

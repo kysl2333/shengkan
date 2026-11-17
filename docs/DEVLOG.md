@@ -19,6 +19,7 @@
 - 截图环境使用临时 profile、项目、音色和输出目录，不涉及真实项目和音色
 - GitHub 仓库 `kysl2333/shengkan` 已创建并推送 `main`；Release v1.0.1 上传安装包，SHA-256 与本地一致
 - 本地测试运行目录、旧 0.1.0 安装包、临时隔离数据和 `paths.cjs` 已移入回收站；`release/` 只保留 1.0.1 安装包和 blockmap
+- 卸载测试：临时安装目录内的 `keepme-before.txt`、`keepdir-before`、`keepme-after.txt`、`keepdir-after` 被递归删除；`%APPDATA%/shengkan/ai.json` 和 Documents 项目/音色目录保留；快捷方式和卸载注册表项清理正常
 
 ## 2026-11-17 · 发行版提示词、设置页操作和 GitHub 准备
 
