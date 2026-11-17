@@ -74,7 +74,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "shengkan"
+      "shortcutName": "shengkan",
+      "include": "build/installer.nsh"
     }
   }
 }

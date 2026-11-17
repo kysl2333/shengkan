@@ -32,7 +32,7 @@
 | 项目数据 | 活动项目 `p-mw91apwo`（20 章）；`projects/.trash/` 里还有 `p-mw7phvqs` 和 `p-mw81gv9b` |
 | MCP | 可用。26 个工具覆盖建项目、章节/台词、角色/音色、生成、导出、回收站和启动软件；权限四档，默认 generate；OpenCode 需重启后重新连接 |
 | 日志 | 可用。`%APPDATA%/shengkan/logs/app.log`，5 MB 轮转，保留 1 份备份，设置页可清空 |
-| 安装包 | 已生成 `release/shengkan-1.0.1-setup.exe`，带最新 logo 和 GPL-3.0 `LICENSE`；未签名；本地测试运行目录和隔离入口已移入回收站，只保留 1.0.1 安装包 |
+| 安装包 | 已生成 `release/shengkan-1.0.1-setup.exe`，带最新 logo 和 GPL-3.0 `LICENSE`；未签名；本地测试运行目录和隔离入口已移入回收站，只保留 1.0.1 安装包；安装器目录保护已写入 `app/build/installer.nsh`，尚未构建 |
 | Git | 已发布到 https://github.com/kysl2333/shengkan（公开），远端 `origin` 已配置，Release v1.0.1 含安装包；本地 `.scratch/` 已从索引移除 |
 
 ## 事故说明
@@ -161,7 +161,7 @@ npm.cmd run check:studio
 
 1. 恢复 `voices/*.wav` 参考音频
 2. 重新导入之前那本书，或恢复 41 章项目
-3. 把 `logo/shiori-icon/icon-256.png` 转成 `.ico` 并接入 `build.icon`
+3. 下次构建时验证 `app/build/installer.nsh` 的目录保护，并按 `docs/INSTALLER.md` 跑安装/卸载清单
 4. MCP 修改后界面实时刷新
 5. 暂停/继续生成
 6. 如果要兼容旧安装版，再加中文目录到拼音目录的迁移提示

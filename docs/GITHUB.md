@@ -11,6 +11,7 @@
 - 仓库：[kysl2333/shengkan](https://github.com/kysl2333/shengkan)（公开）
 - 本地分支：`main`，远端 `origin` 已配置
 - 安装包：`release/shengkan-1.0.1-setup.exe`，带最新 logo 和 GPL-3.0 `LICENSE`
+- 安装器目录保护：源码已写入 `app/build/installer.nsh`，尚未构建；v1.0.1 Release 不含
 - Release：[v1.0.1](https://github.com/kysl2333/shengkan/releases/tag/v1.0.1)，已上传安装程序
 
 ## 在 OpenCode 里查看连接器

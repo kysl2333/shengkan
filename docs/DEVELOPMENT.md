@@ -56,6 +56,8 @@ npm.cmd run dist
 
 输出在 `release/shengkan-<version>-setup.exe`。安装包未做代码签名，Windows SmartScreen 可能提示「未知发布者」。
 
+安装器目录保护说明见 [INSTALLER.md](INSTALLER.md)。源码已改，但 v1.0.1 发布包未包含；下一次 `npm.cmd run dist` 后需要按清单重新验证。
+
 ## 版本管理
 
 仓库主分支是 `main`；`design/ui-refresh` 已合并，`optimize/next`、`optimize/next-2`、`optimize/next-3` 已清理。

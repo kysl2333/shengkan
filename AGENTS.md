@@ -271,7 +271,7 @@ Windows 上优先用 `npm.cmd` / `npx.cmd`，`npm.ps1` 常被 PowerShell 执行�
 - 迁移包 `app/electron` 初始没有 `config.cjs`，`main.cjs` 依赖它，必须保留。
 - 远端 WebUI 关掉后生成报连接失败，拆章和导入不受影响。
 - `release/` 里的安装包是构建产物，改了代码要重新 `npm run dist`；当前 v1.0.1 已发布。
-- NSIS 卸载器会递归删除安装目录（`RMDir /r $INSTDIR`）；不要把其他文件放进安装目录。默认不删除 Documents 项目和音色，也不删除 `%APPDATA%/shengkan`。
+- NSIS 卸载器会递归删除安装目录（`RMDir /r $INSTDIR`）；`app/build/installer.nsh` 已加目录标记、非空目录拒绝和静默安装追加 `shengkan`，但 v1.0.1 发布包还没包含，下一次构建验证后才生效。默认不删除 Documents 项目和音色，也不删除 `%APPDATA%/shengkan`。
 - 旧项目不会自动过滤 EPUB 版权页；需要重新导入，或对正文章节用「AI 重拆本章」。
 - 旧项目里的假角色不会自动消失，用角色页「清理无效角色」或「整本角色标注」重建。
 - MCP 默认读最近修改的项目，可用 `project` 参数指定 id 或标题。

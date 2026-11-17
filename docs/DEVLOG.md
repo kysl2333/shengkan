@@ -1,5 +1,27 @@
 # 开发记录
 
+## 2026-11-17 · 安装器目录保护（未构建）
+
+### 设计
+
+- NSIS 卸载器默认 `RMDir /r $INSTDIR`，会删除安装目录里的所有文件
+- 采用方案 B：目录标记 + 非空目录拒绝 + 静默安装追加 `shengkan` + 卸载前标记检查
+- 自定义目录必须以 `\shengkan` 结尾，避免直接把 `D:\Tools` 当成应用目录
+- 非空目录只允许已有的声栞安装（标记，或 `shengkan.exe` + `Uninstall shengkan.exe`）
+- 安装完成写入隐藏标记 `.shengkan-install`；普通卸载缺标记时停止，升级安装跳过检查
+
+### 改动
+
+- 新增 `app/build/installer.nsh`
+- `app/package.json` 的 `build.nsis.include` 指向 `build/installer.nsh`
+- 详细设计和构建后测试清单见 `docs/INSTALLER.md`
+
+### 状态
+
+- **未构建**：按用户要求先改源码，等下一次加功能时再 `npm.cmd run dist`
+- 已发布的 v1.0.1 安装包不包含这套保护，仍只有文档警告
+- NSIS 结构做了静态配对检查（Function/FunctionEnd、!macro/!macroend、!ifdef/!endif），还没有经过 makensis 编译和实际安装/卸载验证
+
 ## 2026-11-17 · v1.0.1 品牌和截图
 
 ### 完成
